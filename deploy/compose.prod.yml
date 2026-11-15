@@ -1,0 +1,78 @@
+# book-management production stack (LXC "book-management").
+# Never run this directly: secrets are injected by deploy/redeploy.sh via `infisical run`.
+# Variables below without a default come from Infisical (project book-management, env prod).
+
+name: book-management
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  db:
+    image: postgres:18.1-alpine
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_DB: bookdb
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d bookdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # no "ports": only reachable from the compose network
+
+  qdrant:
+    image: qdrant/qdrant:v1.15.5
+    restart: unless-stopped
+    logging: *logging
+    volumes:
+      - qdrant-data:/qdrant/storage
+    mem_limit: 512m
+
+  book-backend:
+    image: ${REGISTRY:-docker.nexus.daniellaera.com}/book-backend:${BACKEND_TAG:?set by redeploy.sh}
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # injected by `infisical run` (names only here, values never in this file)
+      DATABASE_URL: jdbc:postgresql://db:5432/bookdb
+      DATABASE_USERNAME:
+      DATABASE_PASSWORD:
+      JWT_SECRET:
+      GITHUB_CLIENT_ID:
+      GITHUB_SECRET:
+      GITHUB_REDIRECT_URI:
+      FRONTEND_URL:
+      ANTHROPIC_API_KEY:
+      ANTHROPIC_MODEL:
+      INDEX_API_TOKEN:
+      OLLAMA_URL:
+      QDRANT_URL: http://qdrant:6333
+      JAVA_TOOL_OPTIONS: -Xmx768m
+    mem_limit: 1280m
+
+  book-frontend:
+    image: ${REGISTRY:-docker.nexus.daniellaera.com}/book-frontend:${FRONTEND_TAG:?set by redeploy.sh}
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      - book-backend
+    ports:
+      - "8081:80"   # NPM (CT 150) proxies bookmanagement.daniellaera.com here
+    mem_limit: 128m
+
+volumes:
+  db-data:
+  qdrant-data:

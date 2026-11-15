@@ -170,7 +170,20 @@ jobs:
           docker push docker.nexus.daniellaera.com/book-frontend:latest
           docker push docker.nexus.daniellaera.com/book-frontend:${{ github.sha }}
 
-      - name: Deploy to app-book-dev via SSH
+      # CI holds only the SSH deploy key + registry credentials. NO application secrets:
+      # the LXC pulls them from Infisical at start (see deploy/redeploy.sh, docs/DEPLOYMENT.md).
+      - name: Copy deploy files to the book-management LXC
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VM_SSH_PORT }}
+          source: "deploy/compose.prod.yml,deploy/redeploy.sh"
+          target: /opt/book-management
+          strip_components: 0
+
+      - name: Redeploy (pull, inject secrets, restart, health check, auto-rollback)
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VM_HOST }}
@@ -178,11 +191,5 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.VM_SSH_PORT }}
           script: |
-            echo "Logging into Nexus on target server..."
-            echo "${{ secrets.NEXUS_PASSWORD }}" | docker login docker.nexus.daniellaera.com -u "${{ secrets.NEXUS_USER }}" --password-stdin
-            cd /srv/app-book-dev
-            docker pull docker.nexus.daniellaera.com/book-backend:latest
-            docker pull docker.nexus.daniellaera.com/book-frontend:latest  
-            docker compose -f compose.yml down || true
-            docker compose -f compose.yml up -d
-            docker image prune -f
+            chmod +x /opt/book-management/deploy/redeploy.sh
+            /opt/book-management/deploy/redeploy.sh ${{ github.sha }}
