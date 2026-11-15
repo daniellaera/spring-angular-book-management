@@ -14,7 +14,7 @@ PROJECT_ID_FILE=/root/.config/book-management/project_id
 APP_PORT=8081
 COMPOSE=(docker compose -f compose.prod.yml)
 mkdir -p "$STATE_DIR"
-export INFISICAL_DOMAIN="${INFISICAL_DOMAIN:-http://192.168.1.163/api}"   # self-hosted Infisical
+export INFISICAL_API_URL="${INFISICAL_API_URL:-http://192.168.1.163/api}"; export INFISICAL_DOMAIN="$INFISICAL_API_URL"   # self-hosted Infisical
 
 [ "$(stat -c %a "$CRED")" = "600" ] || { echo "$CRED must be mode 600" >&2; exit 1; }
 
@@ -27,8 +27,8 @@ export INFISICAL_TOKEN
 PROJECT_ID="$(cat "$PROJECT_ID_FILE")"
 run_with_secrets() { infisical run --projectId="$PROJECT_ID" --env=prod --silent -- "$@"; }
 
-# --- registry login using pull credentials stored in Infisical ---
-run_with_secrets bash -c 'echo "$NEXUS_PULL_PASSWORD" | docker login "${REGISTRY:-docker.nexus.daniellaera.com}" -u "$NEXUS_PULL_USER" --password-stdin >/dev/null'
+# --- registry login: only when pull credentials exist in Infisical (NEXUS_PULL_USER/NEXUS_PULL_PASSWORD) ---
+run_with_secrets bash -c 'if [ -n "${NEXUS_PULL_USER:-}" ]; then echo "$NEXUS_PULL_PASSWORD" | docker login "${REGISTRY:-docker.nexus.daniellaera.com}" -u "$NEXUS_PULL_USER" --password-stdin >/dev/null; else echo "no NEXUS_PULL_* in Infisical: using local images only"; fi'
 trap 'docker logout "${REGISTRY:-docker.nexus.daniellaera.com}" >/dev/null 2>&1 || true' EXIT
 
 PREV_BACKEND="$(cat "$STATE_DIR/backend.tag" 2>/dev/null || true)"
@@ -36,8 +36,9 @@ PREV_FRONTEND="$(cat "$STATE_DIR/frontend.tag" 2>/dev/null || true)"
 
 deploy() { # $1 backend tag, $2 frontend tag
   export BACKEND_TAG="$1" FRONTEND_TAG="$2"
-  run_with_secrets "${COMPOSE[@]}" pull --quiet book-backend book-frontend
-  run_with_secrets "${COMPOSE[@]}" up --detach --remove-orphans
+  # pull when possible; if the registry is unreachable/unauthorised the image must already exist locally (up uses --pull missing)
+  run_with_secrets "${COMPOSE[@]}" pull --quiet book-backend book-frontend || echo "pull skipped/failed, trying local images" >&2
+  run_with_secrets "${COMPOSE[@]}" up --detach --remove-orphans --pull missing
 }
 
 healthy() {

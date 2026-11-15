@@ -7,30 +7,14 @@ Status of the migration from VM `app-book-dev` (+ separate DB host `book-managem
 | Step | State |
 |------|-------|
 | 0-1 Audit, land AI hardening | Done. 75 tests green (run in `maven:3.9.9-temurin-21` with the Docker socket; local JDK 25 breaks Lombok). |
-| 3 LXC | **Done**: CT 110 created via scoped API token (CT 107/109 configs are not readable by that token, conventions taken from the esign notes), Docker 29 + compose + Infisical CLI 0.45.8. |
-| 5 Data + parallel run | **Done, green** (Host-header tests on the LXC IP; NPM is not reachable with the scoped token). Restore matched old counts on all 7 tables. Images were built on the LXC (`local-<sha>`) because Nexus pull credentials are not available to the agent. |
-| 2 Secrets into Infisical | **Pending (needs you)**: no Infisical credentials existed. Values are staged in tmpfs `/dev/shm/book.env` on the LXC (never on disk, lost on LXC reboot; running containers keep their env). See "Finish Infisical". |
-| 4 Pipeline | Workflow rewritten, not pushed, not exercised (needs Infisical identity + `NEXUS_PULL_*` + LXC SSH key as `SSH_PRIVATE_KEY`/`VM_HOST`). |
-| 6 Cutover | **Not done**: needs (a) Infisical finished and (b) NPM access (CT 150) to switch the upstream. Old stack untouched. |
+| 2 Secrets | **Done**: 11 secrets in Infisical (project `book-management`, env `prod`), runtime identity `book-runtime` (Viewer). `DATABASE_URL` and `QDRANT_URL` are NOT in Infisical: fixed in `compose.prod.yml` (internal service names). The tmpfs staging files were shredded. |
+| 3 LXC | **Done**: CT 110 (192.168.1.110, Debian 13, unprivileged, nesting, 2 vCPU/4 GB/20 GB, onboot). |
+| 4 Pipeline | Workflow ready (not pushed, not yet exercised). Needs Gitea secrets `VM_HOST`=192.168.1.110, `VM_USER`=root, `VM_SSH_PORT`=22, `SSH_PRIVATE_KEY` authorised on the LXC, and `NEXUS_PULL_USER/PASSWORD` in Infisical (without them redeploy.sh uses local images only). |
+| 5 Data + parallel run | Done, green. |
+| 6 Cutover | Final stop/dump/restore/count-compare done, stack live on `192.168.1.110:8081` with Infisical-injected secrets. NPM upstream switch is a manual step. The old backend container is STOPPED on `app-book-dev` (`docker start book-backend` = rollback). |
 
-## Finish Infisical (one-time, ~10 min)
-1. In Infisical (192.168.1.163) create project `book-management`, environment `prod`. Note the project id.
-2. Create Machine Identity `book-import` (Universal Auth) with **write** on the project; create `book-runtime` with **read-only**. Generate a client secret for each.
-3. Add secrets `NEXUS_PULL_USER` / `NEXUS_PULL_PASSWORD` (read-only Nexus account) in prod.
-4. On the LXC: `ssh root@192.168.1.110`, then
-   `export INFISICAL_TOKEN=$(infisical login --domain http://192.168.1.163/api --method=universal-auth --client-id=<import-id> --client-secret=<import-secret> --plain --silent)`
-   and `/opt/book-management/deploy/infisical-import.sh <projectId>`.
-5. Store the runtime identity: `install -m600 /dev/null /root/.config/book-management/infisical.env` and put
-   `INFISICAL_CLIENT_ID=...` / `INFISICAL_CLIENT_SECRET=...` of `book-runtime` in it.
-6. Then tell Claude, or run `redeploy.sh <tag>` yourself; run `infisical-import.sh <projectId> x --shred` only after the cutover succeeded.
-
-## Cutover procedure (final restore is mandatory)
-1. Stop the old backend: `ssh app-book-dev docker stop book-backend` (nothing writes any more).
-2. On the LXC: `deploy/dump-old-db.sh` then `deploy/migrate-data.sh /root/dumps/latest.dump`; `deploy/count-rows.sh new` must equal
-   `/root/dumps/latest.old.counts` per table. **If counts differ: do not cut over**, `docker start book-backend` on the old VM.
-3. Redeploy via `redeploy.sh`, reindex (`POST /api/v3/ai/books/index` + `X-Index-Token`), run the checks below on the LXC.
-4. Switch NPM upstream of `bookmanagement.daniellaera.com` to `192.168.1.110:8081`, re-run checks on the public URL, watch logs 10 min.
-   On any failure: NPM back to the old VM, `docker start book-backend` there.
+Rollback after the NPM switch: point NPM back to the old VM and `ssh app-book-dev docker start book-backend`. Note data written
+on the new stack after cutover is not copied back.
 
 ## Reference pattern (what I could audit)
 - **esign-workflow-api (CT 109)**: unprivileged Debian LXC, nesting=1, Docker CE + compose plugin, repo cloned in `/opt/<app>`,
@@ -85,6 +69,11 @@ Containers receive secrets as environment variables at `up` time (no `.env` on d
 - Health: `curl -fsS http://<LXC>:8081/api/v3/book`; logs: `docker compose -f /opt/book-management/deploy/compose.prod.yml logs -f book-backend`.
 - Rollback: automatic on a failed health check (previous tags in `/var/lib/book-management/*.tag`). Manual: run redeploy.sh with an older sha.
 - Reindex Qdrant: `POST /api/v3/ai/books/index` with header `X-Index-Token` (value from Infisical `INDEX_API_TOKEN`).
+
+## Cutover procedure (used; repeat for any re-do)
+1. `ssh app-book-dev docker stop book-backend`. 2. On the LXC: `deploy/dump-old-db.sh` (needs `/dev/shm/olddb.env`, piped from the old VM backend.env),
+`deploy/migrate-data.sh /root/dumps/latest.dump`, `deploy/count-rows.sh new` must equal `/root/dumps/latest.old.counts` or abort and restart the old container.
+3. `deploy/redeploy.sh <tag>`, reindex, checks, switch NPM, watch logs 10 min.
 
 ## Check list used in the parallel run (`/root/e2e.sh` pattern)
 1. Restore: on old VM `pg_dump -Fc --no-owner`, copy to LXC, `deploy/migrate-data.sh <dump>`.
