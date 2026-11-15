@@ -78,6 +78,9 @@ public class SecurityConfig {
                     auth.requestMatchers("/api/v3/ai/books/ask/**").hasAuthority("USER");
                     auth.requestMatchers("/api/v3/ai/books/remaining").hasAuthority("USER");
 
+                    // Re-indexing triggers Ollama + Qdrant writes: never public
+                    auth.requestMatchers("/api/v3/ai/books/index").hasAuthority("USER");
+
                     // Other AI endpoints
                     auth.requestMatchers("/api/v3/ai/**").permitAll();
 

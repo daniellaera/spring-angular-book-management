@@ -150,10 +150,10 @@ public class BookAiController {
 
         // 4. CONTEXT BUILDING: Uses Record Accessors (id(), title(), etc.)
         String bookContext = books.stream()
-                .map(b -> String.format("ID: %d | Title: %s | Author: %s | Rating: %s | Available: %s",
+                .map(b -> String.format("%d|%s|%s|%s|%s",
                         b.id(), b.title(), b.author(),
-                        b.averageRating() != null ? b.averageRating() : "N/A",
-                        b.available() ? "Yes" : "No"))
+                        b.averageRating() != null ? b.averageRating() : "-",
+                        b.available() ? "Y" : "N"))
                 .collect(Collectors.joining("\n"));
 
         // 5. THE FINAL SYSTEM PROMPT
@@ -164,7 +164,7 @@ public class BookAiController {
             - Total books in database: %d
             - The following %d books are the most relevant matches found for the user's query.
             
-            Search Results Context:
+            Books (format: id|title|author|rating|available Y/N):
             %s
             
             Instructions:
