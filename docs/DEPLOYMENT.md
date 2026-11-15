@@ -1,17 +1,36 @@
 # book-management: deployment
 
-Status of the migration from VM `app-book-dev` to an LXC with Infisical-injected secrets.
-**Repo side is done; infrastructure side (Steps 2-6) is NOT done yet, see "Status / blockers".**
+Status of the migration from VM `app-book-dev` (+ separate DB host `book-management-db-dev.home`) to LXC CT 110 `book-management`
+(192.168.1.110, Debian 13, unprivileged, nesting, 2 vCPU / 4 GB / 20 GB on `big-data-pve`, pool `book-pool`, onboot) with Postgres in Docker.
 
 ## Status / blockers
 | Step | State |
 |------|-------|
-| 0 Audit | Done from local repos (esign-workflow-api, dealje). DevConnector (CT 107) repo is not on this machine, so its pattern is inferred from esign's notes, which say esign was modelled on it. |
-| 1 Land AI hardening | Done locally: `chore/ai-hardening` fast-forwarded into `main` (75 tests green). Not pushed. |
-| 2 Secrets into Infisical | **Blocked**: no `INFISICAL_TOKEN`/machine identity and no Infisical CLI on this machine; the old VM is not in `~/.ssh/config`. |
-| 3 New LXC | **Blocked**: SSH as root to the Proxmox host (192.168.1.54) was denied by the permission classifier; no scoped Proxmox token found. Scripts are ready: `deploy/bootstrap-lxc.sh`, `deploy/redeploy.sh`. |
-| 4 Pipeline | Workflow rewritten on branch `chore/deploy-pipeline` (not pushed, not yet exercised). |
-| 5 Data + parallel run, 6 Cutover | Not started (need 2 and 3). Nothing existing was touched. |
+| 0-1 Audit, land AI hardening | Done. 75 tests green (run in `maven:3.9.9-temurin-21` with the Docker socket; local JDK 25 breaks Lombok). |
+| 3 LXC | **Done**: CT 110 created via scoped API token (CT 107/109 configs are not readable by that token, conventions taken from the esign notes), Docker 29 + compose + Infisical CLI 0.45.8. |
+| 5 Data + parallel run | **Done, green** (Host-header tests on the LXC IP; NPM is not reachable with the scoped token). Restore matched old counts on all 7 tables. Images were built on the LXC (`local-<sha>`) because Nexus pull credentials are not available to the agent. |
+| 2 Secrets into Infisical | **Pending (needs you)**: no Infisical credentials existed. Values are staged in tmpfs `/dev/shm/book.env` on the LXC (never on disk, lost on LXC reboot; running containers keep their env). See "Finish Infisical". |
+| 4 Pipeline | Workflow rewritten, not pushed, not exercised (needs Infisical identity + `NEXUS_PULL_*` + LXC SSH key as `SSH_PRIVATE_KEY`/`VM_HOST`). |
+| 6 Cutover | **Not done**: needs (a) Infisical finished and (b) NPM access (CT 150) to switch the upstream. Old stack untouched. |
+
+## Finish Infisical (one-time, ~10 min)
+1. In Infisical (192.168.1.163) create project `book-management`, environment `prod`. Note the project id.
+2. Create Machine Identity `book-import` (Universal Auth) with **write** on the project; create `book-runtime` with **read-only**. Generate a client secret for each.
+3. Add secrets `NEXUS_PULL_USER` / `NEXUS_PULL_PASSWORD` (read-only Nexus account) in prod.
+4. On the LXC: `ssh root@192.168.1.110`, then
+   `export INFISICAL_TOKEN=$(infisical login --domain http://192.168.1.163/api --method=universal-auth --client-id=<import-id> --client-secret=<import-secret> --plain --silent)`
+   and `/opt/book-management/deploy/infisical-import.sh <projectId>`.
+5. Store the runtime identity: `install -m600 /dev/null /root/.config/book-management/infisical.env` and put
+   `INFISICAL_CLIENT_ID=...` / `INFISICAL_CLIENT_SECRET=...` of `book-runtime` in it.
+6. Then tell Claude, or run `redeploy.sh <tag>` yourself; run `infisical-import.sh <projectId> x --shred` only after the cutover succeeded.
+
+## Cutover procedure (final restore is mandatory)
+1. Stop the old backend: `ssh app-book-dev docker stop book-backend` (nothing writes any more).
+2. On the LXC: `deploy/dump-old-db.sh` then `deploy/migrate-data.sh /root/dumps/latest.dump`; `deploy/count-rows.sh new` must equal
+   `/root/dumps/latest.old.counts` per table. **If counts differ: do not cut over**, `docker start book-backend` on the old VM.
+3. Redeploy via `redeploy.sh`, reindex (`POST /api/v3/ai/books/index` + `X-Index-Token`), run the checks below on the LXC.
+4. Switch NPM upstream of `bookmanagement.daniellaera.com` to `192.168.1.110:8081`, re-run checks on the public URL, watch logs 10 min.
+   On any failure: NPM back to the old VM, `docker start book-backend` there.
 
 ## Reference pattern (what I could audit)
 - **esign-workflow-api (CT 109)**: unprivileged Debian LXC, nesting=1, Docker CE + compose plugin, repo cloned in `/opt/<app>`,
@@ -67,7 +86,7 @@ Containers receive secrets as environment variables at `up` time (no `.env` on d
 - Rollback: automatic on a failed health check (previous tags in `/var/lib/book-management/*.tag`). Manual: run redeploy.sh with an older sha.
 - Reindex Qdrant: `POST /api/v3/ai/books/index` with header `X-Index-Token` (value from Infisical `INDEX_API_TOKEN`).
 
-## Cutover plan (not executed)
+## Check list used in the parallel run (`/root/e2e.sh` pattern)
 1. Restore: on old VM `pg_dump -Fc --no-owner`, copy to LXC, `deploy/migrate-data.sh <dump>`.
 2. Start stack, reindex, test via `curl -H 'Host: bookmanagement.daniellaera.com' http://<LXC>:8081/...` or a temporary NPM host.
 3. Checks: signup/login, book CRUD, `/ask` twice (second `cached=true`, `AI usage ... cached=Y` log), anonymous `/ask/stream`, `/index` without token = 401/403, with token = 200, GitHub OAuth redirect URI.

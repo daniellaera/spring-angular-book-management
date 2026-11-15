@@ -14,6 +14,7 @@ PROJECT_ID_FILE=/root/.config/book-management/project_id
 APP_PORT=8081
 COMPOSE=(docker compose -f compose.prod.yml)
 mkdir -p "$STATE_DIR"
+export INFISICAL_DOMAIN="${INFISICAL_DOMAIN:-http://192.168.1.163/api}"   # self-hosted Infisical
 
 [ "$(stat -c %a "$CRED")" = "600" ] || { echo "$CRED must be mode 600" >&2; exit 1; }
 
