@@ -126,8 +126,14 @@ public class BookAiController {
                 .call()
                 .chatResponse();
 
-        String answer = response.getResult().getOutput().getText();
-        cache.put(question, answer);
+        // join all generations: with some models the first one carries no text
+        String answer = response.getResults().stream()
+                .map(g -> g.getOutput().getText())
+                .filter(t -> t != null && !t.isBlank())
+                .collect(java.util.stream.Collectors.joining());
+        if (!answer.isBlank()) {
+            cache.put(question, answer);
+        }
         usageLogger.logCall(caller.label(),
                 response.getMetadata() != null ? response.getMetadata().getModel() : null,
                 response.getMetadata() != null ? response.getMetadata().getUsage() : null);

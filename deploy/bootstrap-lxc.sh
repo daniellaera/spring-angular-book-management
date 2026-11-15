@@ -16,7 +16,7 @@ if ! command -v docker >/dev/null; then
 fi
 # Infisical CLI
 if ! command -v infisical >/dev/null; then
-  curl -1sLf 'https://dl.cloudsmith.io/public/infisical/infisical-cli/setup.deb.sh' | bash
+  curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | bash
   apt-get install -y -qq infisical
 fi
 install -d -m 700 /root/.config/book-management
