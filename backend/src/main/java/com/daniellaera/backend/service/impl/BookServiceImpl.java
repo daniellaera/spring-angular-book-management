@@ -6,6 +6,7 @@ import com.daniellaera.backend.repository.BookRepository;
 import com.daniellaera.backend.repository.UserRepository;
 import com.daniellaera.backend.service.AiCacheService;
 import com.daniellaera.backend.service.BookService;
+import com.daniellaera.backend.service.BookVectorIndexService;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
@@ -29,15 +30,18 @@ public class BookServiceImpl implements BookService {
     private final UserRepository userRepository;
     private final BorrowRepository borrowRepository;
     private final AiCacheService aiCacheService;
+    private final BookVectorIndexService vectorIndexService;
 
     @Autowired
     public BookServiceImpl(BookRepository bookRepository,
                            UserRepository userRepository,
-                           BorrowRepository borrowRepository, AiCacheService aiCacheService) {
+                           BorrowRepository borrowRepository, AiCacheService aiCacheService,
+                           BookVectorIndexService vectorIndexService) {
         this.bookRepository = bookRepository;
         this.userRepository = userRepository;
         this.borrowRepository = borrowRepository;
         this.aiCacheService = aiCacheService;
+        this.vectorIndexService = vectorIndexService;
     }
 
     @Override
@@ -84,6 +88,7 @@ public class BookServiceImpl implements BookService {
         bookRepository.delete(book);
         log.info("Book with id: {} deleted", bookId);
         aiCacheService.clear();
+        vectorIndexService.deleteBookPoint(bookId); // best effort, never throws
     }
 
     @Override

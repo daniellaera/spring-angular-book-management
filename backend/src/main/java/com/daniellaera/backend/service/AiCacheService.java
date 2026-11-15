@@ -1,8 +1,10 @@
 package com.daniellaera.backend.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -17,19 +19,32 @@ import java.util.Map;
 @Slf4j
 public class AiCacheService {
 
-    private static final int MAX_ENTRIES = 500;
-    private static final Duration TTL = Duration.ofHours(24);
+    static final int DEFAULT_MAX_ENTRIES = 500;
+    static final Duration DEFAULT_TTL = Duration.ofHours(24);
 
     private record CachedAnswer(String answer, long expiresAtMillis) {}
 
-    private final Map<String, CachedAnswer> cache = new LinkedHashMap<>(64, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, CachedAnswer> eldest) {
-            return size() > MAX_ENTRIES;
-        }
-    };
+    private final Clock clock;
+    private final Duration ttl;
+    private final Map<String, CachedAnswer> cache;
 
-    private static String key(String question) {
+    @Autowired
+    public AiCacheService() {
+        this(Clock.systemUTC(), DEFAULT_TTL, DEFAULT_MAX_ENTRIES);
+    }
+
+    AiCacheService(Clock clock, Duration ttl, int maxEntries) {
+        this.clock = clock;
+        this.ttl = ttl;
+        this.cache = new LinkedHashMap<>(64, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, CachedAnswer> eldest) {
+                return size() > maxEntries;
+            }
+        };
+    }
+
+    static String key(String question) {
         return question == null ? "" : question.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
     }
 
@@ -37,7 +52,7 @@ public class AiCacheService {
         String k = key(question);
         CachedAnswer e = cache.get(k);
         if (e == null) return null;
-        if (e.expiresAtMillis() < System.currentTimeMillis()) {
+        if (e.expiresAtMillis() <= clock.millis()) {
             cache.remove(k);
             return null;
         }
@@ -46,7 +61,7 @@ public class AiCacheService {
 
     public synchronized void put(String question, String answer) {
         if (answer == null || answer.isBlank()) return; // never cache empty/failed answers
-        cache.put(key(question), new CachedAnswer(answer, System.currentTimeMillis() + TTL.toMillis()));
+        cache.put(key(question), new CachedAnswer(answer, clock.millis() + ttl.toMillis()));
     }
 
     public synchronized void clear() {

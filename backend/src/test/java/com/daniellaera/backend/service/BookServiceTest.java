@@ -53,10 +53,13 @@ public class BookServiceTest {
     @Mock
     private AiCacheService aiCacheService;
 
+    @Mock
+    private BookVectorIndexService vectorIndexService;
+
     @BeforeEach
     public void setUp() {
         // to remove in case we @InjectMocks of bookServiceImpl
-        bookService = new BookServiceImpl(bookRepository, userRepository, borrowRepository, aiCacheService);
+        bookService = new BookServiceImpl(bookRepository, userRepository, borrowRepository, aiCacheService, vectorIndexService);
     }
 
     @Test
@@ -171,6 +174,7 @@ public class BookServiceTest {
         bookService.deleteBook(bookId);
 
         verify(bookRepository, times(1)).delete(book);
+        verify(vectorIndexService).deleteBookPoint(bookId);
     }
 
     @Test

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -14,18 +15,21 @@ import java.util.Map;
 public class QdrantSearchService {
 
     private final WebClient webClient;
+    private final EmbeddingService embeddingService;
 
     @Value("${qdrant.url}")
     private String qdrantUrl;
 
-    @Value("${ollama.api-url}")
-    private String ollamaUrl;
-
     @Value("${qdrant.collection}")
     private String collection;
 
-    public QdrantSearchService(WebClient.Builder builder) {
+    /** 0 = off. Tune using the DEBUG score logs. */
+    @Value("${qdrant.score-threshold:0}")
+    private double scoreThreshold;
+
+    public QdrantSearchService(WebClient.Builder builder, EmbeddingService embeddingService) {
         this.webClient = builder.build();
+        this.embeddingService = embeddingService;
     }
 
     /**
@@ -34,20 +38,20 @@ public class QdrantSearchService {
      */
     @SuppressWarnings("unchecked")
     public List<Integer> searchSimilarBooks(String query, int limit) {
-        // Generate embedding for the query
-        List<Double> queryEmbedding = getEmbedding(query);
+        List<Double> queryEmbedding = embeddingService.embedQuery(query);
 
         if (queryEmbedding == null || queryEmbedding.isEmpty()) {
             log.warn("Failed to generate embedding for query: {}", query);
             return List.of();
         }
 
-        // Search Qdrant
-        Map<String, Object> searchBody = Map.of(
-                "vector", queryEmbedding,
-                "limit", limit,
-                "with_payload", true
-        );
+        Map<String, Object> searchBody = new HashMap<>();
+        searchBody.put("vector", queryEmbedding);
+        searchBody.put("limit", limit);
+        searchBody.put("with_payload", true);
+        if (scoreThreshold > 0) {
+            searchBody.put("score_threshold", scoreThreshold);
+        }
 
         try {
             Map<String, Object> response = webClient.post()
@@ -63,8 +67,9 @@ public class QdrantSearchService {
 
                 for (Map<String, Object> result : results) {
                     Map<String, Object> payload = (Map<String, Object>) result.get("payload");
-                    if (payload != null && payload.containsKey("bookId")) {
-                        bookIds.add((Integer) payload.get("bookId"));
+                    if (payload != null && payload.get("bookId") instanceof Number id) {
+                        bookIds.add(id.intValue());
+                        log.debug("Qdrant hit bookId={} score={}", id, result.get("score"));
                     }
                 }
 
@@ -76,27 +81,5 @@ public class QdrantSearchService {
         }
 
         return List.of();
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<Double> getEmbedding(String text) {
-        try {
-            Map<String, Object> response = webClient.post()
-                    .uri(ollamaUrl + "/api/embeddings")
-                    .bodyValue(Map.of(
-                            "model", "nomic-embed-text",
-                            "prompt", text
-                    ))
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .block();
-
-            if (response != null && response.containsKey("embedding")) {
-                return (List<Double>) response.get("embedding");
-            }
-        } catch (Exception e) {
-            log.error("Ollama embedding failed: {}", e.getMessage());
-        }
-        return null;
     }
 }

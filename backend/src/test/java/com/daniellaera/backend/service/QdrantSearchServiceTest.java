@@ -2,82 +2,62 @@ package com.daniellaera.backend.service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
-public class QdrantSearchServiceTest {
+class QdrantSearchServiceTest {
 
-    @Mock
-    private WebClient webClient;
-
-    @Mock
-    private WebClient.RequestBodyUriSpec requestBodyUriSpec;
-
-    @Mock
-    private WebClient.RequestHeadersSpec<?> requestHeadersSpec;
-
-    @Mock
-    private WebClient.ResponseSpec responseSpec;
-
-    private QdrantSearchService qdrantSearchService;
+    private EmbeddingService embeddingService;
+    private String qdrantJson = "{\"result\":[]}";
+    private QdrantSearchService service;
 
     @BeforeEach
-    void setUp() throws Exception {
-        WebClient.Builder builder = mock(WebClient.Builder.class);
-        given(builder.build()).willReturn(webClient);
-
-        qdrantSearchService = new QdrantSearchService(builder);
-
-        setField("qdrantUrl", "http://localhost:6333");
-        setField("collection", "books");
-        setField("ollamaUrl", "http://localhost:11434");
-    }
-
-    private void setField(String name, String value) throws Exception {
-        var field = QdrantSearchService.class.getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(qdrantSearchService, value);
+    void setUp() {
+        embeddingService = mock(EmbeddingService.class);
+        // stub transport: answer every Qdrant call with qdrantJson
+        WebClient.Builder builder = WebClient.builder().exchangeFunction(req -> {
+            return Mono.just(ClientResponse.create(HttpStatus.OK)
+                    .header("Content-Type", "application/json").body(qdrantJson).build());
+        });
+        service = new QdrantSearchService(builder, embeddingService);
+        ReflectionTestUtils.setField(service, "qdrantUrl", "http://localhost:6333");
+        ReflectionTestUtils.setField(service, "collection", "books");
     }
 
     @Test
-    void searchSimilarBooks_OllamaFails_ReturnsEmptyList() {
-        given(webClient.post()).willReturn(requestBodyUriSpec);
-        given(requestBodyUriSpec.uri(anyString())).willReturn(requestBodyUriSpec);
-        doReturn(requestHeadersSpec).when(requestBodyUriSpec).bodyValue(any());
-        given(requestHeadersSpec.retrieve()).willReturn(responseSpec);
-        given(responseSpec.bodyToMono(Map.class))
-                .willReturn(Mono.error(new RuntimeException("Ollama unavailable")));
-
-        List<Integer> results = qdrantSearchService.searchSimilarBooks("test", 5);
-
-        assertThat(results).isEmpty();
+    void embeddingFails_returnsEmptyList() {
+        when(embeddingService.embedQuery(anyString())).thenReturn(null);
+        assertThat(service.searchSimilarBooks("test", 5)).isEmpty();
     }
 
     @Test
-    void searchSimilarBooks_EmptyEmbedding_ReturnsEmptyList() {
-        given(webClient.post()).willReturn(requestBodyUriSpec);
-        given(requestBodyUriSpec.uri(anyString())).willReturn(requestBodyUriSpec);
-        doReturn(requestHeadersSpec).when(requestBodyUriSpec).bodyValue(any());
-        given(requestHeadersSpec.retrieve()).willReturn(responseSpec);
-        given(responseSpec.bodyToMono(Map.class))
-                .willReturn(Mono.just(Map.of("embedding", List.of())));
+    void emptyEmbedding_returnsEmptyList() {
+        when(embeddingService.embedQuery(anyString())).thenReturn(List.of());
+        assertThat(service.searchSimilarBooks("test", 5)).isEmpty();
+    }
 
-        List<Integer> results = qdrantSearchService.searchSimilarBooks("test", 5);
+    @Test
+    void returnsBookIdsInRankOrder() {
+        when(embeddingService.embedQuery("clean code")).thenReturn(List.of(0.1, 0.2));
+        qdrantJson = "{\"result\":[{\"score\":0.9,\"payload\":{\"bookId\":7}},{\"score\":0.5,\"payload\":{\"bookId\":3}},{\"score\":0.1}]}";
 
-        assertThat(results).isEmpty();
+        assertThat(service.searchSimilarBooks("clean code", 5)).containsExactly(7, 3);
+    }
+
+    @Test
+    void qdrantError_returnsEmptyList() {
+        when(embeddingService.embedQuery(anyString())).thenReturn(new ArrayList<>(List.of(0.1)));
+        qdrantJson = "not json";
+        assertThat(service.searchSimilarBooks("x", 5)).isEmpty();
     }
 }

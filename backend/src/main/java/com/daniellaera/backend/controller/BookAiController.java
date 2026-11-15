@@ -4,10 +4,14 @@ import com.daniellaera.backend.dao.BookAiView;
 import com.daniellaera.backend.dao.BookDTO;
 import com.daniellaera.backend.properties.AiProperties;
 import com.daniellaera.backend.service.*;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.metadata.Usage;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -16,6 +20,7 @@ import reactor.core.publisher.Flux;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 @RestController
@@ -29,6 +34,7 @@ public class BookAiController {
     private final AiCacheService cache;
     private final QdrantSearchService qdrantSearch;
     private final BookVectorIndexService indexService;
+    private final AiUsageLogger usageLogger;
 
     public BookAiController(ChatClient.Builder chatClientBuilder,
                             BookService bookService,
@@ -36,13 +42,15 @@ public class BookAiController {
                             AiRateLimiterService rateLimiter,
                             AiCacheService cache,
                             QdrantSearchService qdrantSearch,
-                            BookVectorIndexService indexService) {
+                            BookVectorIndexService indexService,
+                            AiUsageLogger usageLogger) {
         this.bookService = bookService;
         this.aiProperties = aiProperties;
         this.rateLimiter = rateLimiter;
         this.cache = cache;
         this.qdrantSearch = qdrantSearch;
         this.indexService = indexService;
+        this.usageLogger = usageLogger;
         this.chatClient = chatClientBuilder.build();
     }
 
@@ -64,41 +72,53 @@ public class BookAiController {
     }
 
     @GetMapping(value = "/ask/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> askStream(@RequestParam String question, Authentication auth) {
-        validateRequest(auth);
+    public Flux<String> askStream(@RequestParam String question, Authentication auth, HttpServletRequest request) {
+        Caller caller = resolveCaller(auth, request);
+        validateRequest(caller);
 
         // Check cache
         String cached = cache.get(question);
         if (cached != null) {
+            usageLogger.logCacheHit(caller.label());
             return Flux.just(cached);
         }
 
-        rateLimiter.recordRequest(auth.getName());
+        recordRequest(caller);
 
         StringBuilder fullResponse = new StringBuilder();
+        AtomicReference<Usage> lastUsage = new AtomicReference<>();
+        AtomicReference<String> model = new AtomicReference<>();
 
         return chatClient.prompt()
                 .system(buildSmartPrompt(question))
                 .user(question)
                 .stream()
-                .content()
+                .chatResponse()
+                .doOnNext(r -> captureMetadata(r, lastUsage, model))
+                .mapNotNull(r -> r.getResult() != null ? r.getResult().getOutput().getText() : null)
                 .doOnNext(fullResponse::append)
-                .doOnComplete(() -> cache.put(question, fullResponse.toString()));
+                .doOnComplete(() -> {
+                    cache.put(question, fullResponse.toString());
+                    usageLogger.logCall(caller.label(), model.get(), lastUsage.get());
+                });
     }
 
     @PostMapping("/ask")
-    public Map<String, Object> ask(@RequestBody Map<String, String> payload, Authentication auth) {
-        validateRequest(auth);
+    public Map<String, Object> ask(@RequestBody Map<String, String> payload, Authentication auth,
+                                   HttpServletRequest request) {
+        Caller caller = resolveCaller(auth, request);
+        validateRequest(caller);
 
         String question = payload.get("question");
 
         // Check cache
         String cached = cache.get(question);
         if (cached != null) {
+            usageLogger.logCacheHit(caller.label());
             return Map.of("answer", cached, "cached", true);
         }
 
-        rateLimiter.recordRequest(auth.getName());
+        recordRequest(caller);
 
         var response = chatClient.prompt()
                 .system(buildSmartPrompt(question))
@@ -108,14 +128,23 @@ public class BookAiController {
 
         String answer = response.getResult().getOutput().getText();
         cache.put(question, answer);
+        usageLogger.logCall(caller.label(),
+                response.getMetadata() != null ? response.getMetadata().getModel() : null,
+                response.getMetadata() != null ? response.getMetadata().getUsage() : null);
 
         return Map.of("answer", answer);
     }
 
     @PostMapping("/index")
-    public Map<String, String> indexBooks() {
-        String result = indexService.indexAllBooks();
-        return Map.of("result", result);
+    public Map<String, Object> indexBooks() {
+        BookVectorIndexService.IndexResult r = indexService.indexAllBooks();
+        return Map.of(
+                "result", r.summary(),
+                "indexed", r.indexed(),
+                "skipped", r.skipped(),
+                "deleted", r.deleted(),
+                "failed", r.failed()
+        );
     }
 
     @GetMapping("/remaining")
@@ -126,13 +155,59 @@ public class BookAiController {
         );
     }
 
-    private void validateRequest(Authentication auth) {
+    /** Who is calling: an authenticated user (daily-limit) or an anonymous client keyed by IP (anonymous-daily-limit). */
+    private record Caller(String name, String clientIp) {
+        boolean anonymous() { return name == null; }
+        String label() { return anonymous() ? "anon:" + clientIp : name; }
+    }
+
+    private static Caller resolveCaller(Authentication auth, HttpServletRequest request) {
+        if (auth == null || auth instanceof AnonymousAuthenticationToken || !auth.isAuthenticated()) {
+            return new Caller(null, clientIp(request));
+        }
+        return new Caller(auth.getName(), null);
+    }
+
+    /** First X-Forwarded-For hop if present (we sit behind a reverse proxy), else the socket address. */
+    static String clientIp(HttpServletRequest request) {
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            String first = xff.split(",")[0].trim();
+            if (!first.isEmpty()) return first;
+        }
+        return request.getRemoteAddr();
+    }
+
+    private void validateRequest(Caller caller) {
         if (!aiProperties.isEnabled()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI feature is disabled");
         }
-        if (!rateLimiter.isAllowed(auth.getName())) {
+        boolean allowed = caller.anonymous()
+                ? rateLimiter.isAnonymousAllowed(caller.clientIp())
+                : rateLimiter.isAllowed(caller.name());
+        if (!allowed) {
             throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Daily AI limit reached");
         }
+    }
+
+    private void recordRequest(Caller caller) {
+        if (caller.anonymous()) {
+            rateLimiter.recordAnonymousRequest(caller.clientIp());
+        } else {
+            rateLimiter.recordRequest(caller.name());
+        }
+    }
+
+    // Anthropic streams usage across chunks; keep the latest non-empty values.
+    private static void captureMetadata(ChatResponse r, AtomicReference<Usage> usage, AtomicReference<String> model) {
+        if (r.getMetadata() == null) return;
+        Usage u = r.getMetadata().getUsage();
+        if (u != null && ((u.getPromptTokens() != null && u.getPromptTokens() > 0)
+                || (u.getCompletionTokens() != null && u.getCompletionTokens() > 0))) {
+            usage.set(u);
+        }
+        String m = r.getMetadata().getModel();
+        if (m != null && !m.isBlank()) model.set(m);
     }
 
     /**

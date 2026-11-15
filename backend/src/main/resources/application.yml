@@ -26,6 +26,9 @@ spring:
         options:
           model: ${ANTHROPIC_MODEL:claude-haiku-5-5}
           max-tokens: 2048
+          # No temperature/top-p/top-k on purpose: Claude 5.x rejects non-default sampling params (HTTP 400).
+          # Spring AI 2.0.0-M2 sends none by default. Lowest "effort"/thinking is not exposed by this version
+          # (it is only in the SDK-based 2.0.2+/2.1.x rewrite, which has different properties) - revisit on upgrade.
 
 jwt:
   secret: ${JWT_SECRET}
@@ -51,11 +54,17 @@ app:
 qdrant:
   url: ${QDRANT_URL}
   collection: books
+  init-collection: true   # create the collection (768, Cosine) on startup if missing
+  score-threshold: 0      # 0 = off; set e.g. 0.5 once tuned from the DEBUG score logs
 
 ai:
   enabled: true
   daily-limit: 20
+  anonymous-daily-limit: 5   # per client IP, for the public /ask/stream endpoint
   search-limit: 15
+
+index:
+  api-token: ${INDEX_API_TOKEN:}   # X-Index-Token for the n8n nightly /index call; disabled when empty
 
 ollama:
   api-url: ${OLLAMA_URL}

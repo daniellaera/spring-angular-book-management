@@ -23,6 +23,8 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -50,6 +52,9 @@ public class BookAiControllerTest {
     private BookVectorIndexService indexService;
 
     @Mock
+    private AiUsageLogger usageLogger;
+
+    @Mock
     private ChatClient chatClient;
 
     @Mock
@@ -60,7 +65,7 @@ public class BookAiControllerTest {
         given(chatClientBuilder.build()).willReturn(chatClient);
         BookAiController bookAiController = new BookAiController(
                 chatClientBuilder, bookService, aiProperties,
-                rateLimiter, cache, qdrantSearch, indexService
+                rateLimiter, cache, qdrantSearch, indexService, usageLogger
         );
         mockMvc = MockMvcBuilders.standaloneSetup(bookAiController)
                 .addFilter((request, response, chain) -> {
@@ -124,12 +129,15 @@ public class BookAiControllerTest {
 
     @Test
     void indexBooks_ReturnsResult() throws Exception {
-        given(indexService.indexAllBooks()).willReturn("Indexed 10 books");
+        given(indexService.indexAllBooks()).willReturn(new BookVectorIndexService.IndexResult(10, 2, 1, 0));
 
         mockMvc.perform(post("/api/v3/ai/books/index")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result").value("Indexed 10 books"));
+                .andExpect(jsonPath("$.result").value("Indexed 10, skipped 2, deleted 1, failed 0"))
+                .andExpect(jsonPath("$.indexed").value(10))
+                .andExpect(jsonPath("$.skipped").value(2))
+                .andExpect(jsonPath("$.deleted").value(1));
 
         verify(indexService, times(1)).indexAllBooks();
     }
@@ -154,5 +162,67 @@ public class BookAiControllerTest {
                 .andExpect(jsonPath("$.cached").value(true));
 
         verifyNoInteractions(qdrantSearch);
+    }
+
+    // ---- anonymous (no Authentication) path: rate-limited by client IP ----
+
+    @Test
+    void askStream_Anonymous_DoesNotNpe_AndUsesIpLimit_FromForwardedFor() throws Exception {
+        given(aiProperties.isEnabled()).willReturn(true);
+        given(rateLimiter.isAnonymousAllowed("203.0.113.9")).willReturn(true);
+        given(cache.get("hello")).willReturn("cached answer");
+
+        var result = mockMvc.perform(get("/api/v3/ai/books/ask/stream")
+                        .param("question", "hello")
+                        .header("X-Forwarded-For", "203.0.113.9, 10.0.0.1"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mockMvc.perform(asyncDispatch(result)).andExpect(status().isOk());
+
+        verify(rateLimiter).isAnonymousAllowed("203.0.113.9");
+        verify(rateLimiter, never()).isAllowed(anyString());
+        verify(usageLogger).logCacheHit("anon:203.0.113.9");
+    }
+
+    @Test
+    void askStream_Anonymous_OverLimit_Returns429() throws Exception {
+        given(aiProperties.isEnabled()).willReturn(true);
+        given(rateLimiter.isAnonymousAllowed("203.0.113.9")).willReturn(false);
+
+        mockMvc.perform(get("/api/v3/ai/books/ask/stream")
+                        .param("question", "hello")
+                        .header("X-Forwarded-For", "203.0.113.9"))
+                .andExpect(status().isTooManyRequests());
+
+        verifyNoInteractions(qdrantSearch);
+        verify(rateLimiter, never()).recordAnonymousRequest(anyString());
+    }
+
+    @Test
+    void askStream_Anonymous_FallsBackToRemoteAddr_WithoutForwardedFor() throws Exception {
+        given(aiProperties.isEnabled()).willReturn(true);
+        given(rateLimiter.isAnonymousAllowed("127.0.0.1")).willReturn(false); // MockMvc default remote addr
+
+        mockMvc.perform(get("/api/v3/ai/books/ask/stream").param("question", "hello"))
+                .andExpect(status().isTooManyRequests());
+
+        verify(rateLimiter).isAnonymousAllowed("127.0.0.1");
+    }
+
+    @Test
+    void ask_Authenticated_StillUsesUserLimit() throws Exception {
+        given(aiProperties.isEnabled()).willReturn(true);
+        given(rateLimiter.isAllowed("alice@example.com")).willReturn(false);
+
+        Authentication auth = new UsernamePasswordAuthenticationToken("alice@example.com", null, List.of());
+
+        mockMvc.perform(post("/api/v3/ai/books/ask")
+                        .principal(auth)
+                        .header("X-Forwarded-For", "203.0.113.9")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\": \"hi\"}"))
+                .andExpect(status().isTooManyRequests());
+
+        verify(rateLimiter, never()).isAnonymousAllowed(anyString());
     }
 }

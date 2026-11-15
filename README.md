@@ -169,6 +169,8 @@ The backend requires these environment variables (or use `application-dev.yml` f
 | `ANTHROPIC_API_KEY` | Anthropic API key for Claude |
 | `QDRANT_URL` | Qdrant vector DB URL |
 | `OLLAMA_URL` | Ollama API URL |
+| `ANTHROPIC_MODEL` | Optional. Claude model (default `claude-haiku-5-5`) |
+| `INDEX_API_TOKEN` | Optional. Token for the n8n `/index` call (see below); endpoint token auth is disabled when unset |
 
 ---
 
@@ -184,8 +186,8 @@ The AI chat assistant uses a **RAG (Retrieval-Augmented Generation)** pattern:
 
 ### Cost Protection
 
-- **Rate Limiting** — Configurable daily request limit per user
-- **Response Caching** — 1-hour cache for identical queries
+- **Rate Limiting** — `ai.daily-limit` per user; `ai.anonymous-daily-limit` (default 5) per client IP for the public `/ask/stream`
+- **Response Caching** — bounded LRU (500 entries), 24h TTL, normalised questions
 - **Feature Toggle** — AI can be enabled/disabled via config
 - **Minimal Context** — Only relevant books sent to Claude (not entire catalog)
 
@@ -196,6 +198,21 @@ An **n8n workflow** runs nightly to keep the vector database in sync:
 ```
 Schedule (midnight) → Fetch books from API → Generate embeddings via Ollama → Store in Qdrant
 ```
+
+### n8n indexing
+
+`POST /api/v3/ai/books/index` requires the `USER` authority (browser JWT) **or** the header
+`X-Index-Token` whose value equals the backend env var `INDEX_API_TOKEN`:
+
+```
+POST /api/v3/ai/books/index
+X-Index-Token: <value of INDEX_API_TOKEN>
+```
+
+- The token is compared in constant time and only unlocks this single endpoint.
+- If `INDEX_API_TOKEN` is unset/empty, token auth is disabled.
+- Indexing is incremental: only new/changed books are re-embedded (SHA-256 `contentHash` in the Qdrant payload),
+  points of deleted books are removed. Response: `{"result": "...", "indexed": n, "skipped": n, "deleted": n, "failed": n}`.
 
 ---
 

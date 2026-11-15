@@ -4,8 +4,8 @@ spring:
       client:
         registration:
           github:
-            client-id: Ov23liqqh9FZ0UUwvBwA
-            client-secret: bbd4e12658af08f1d780afcbe7655d2c95843a8d
+            client-id: test-client-id
+            client-secret: test-client-secret
             redirect-uri: http://localhost:4200/login/oauth2/code/github
   ai:
     anthropic:
@@ -26,6 +26,7 @@ quartz:
 qdrant:
   url: http://localhost:6333
   collection: books
+  init-collection: false
 
 ai:
   enabled: true
