@@ -343,6 +343,21 @@ To use protected endpoints in Swagger:
 
 ---
 
+## Design system
+
+| Dark | Light |
+|---|---|
+| ![Library, dark](docs/screenshots/books-dark.jpg) | ![Library, light](docs/screenshots/books-light.jpg) |
+| ![Book detail, dark](docs/screenshots/book-detail-dark.jpg) | ![Book detail, light](docs/screenshots/book-detail-light.jpg) |
+
+Dark-first UI with a warm-neutral surface scale, one amber accent, a teal accent reserved for AI features, Fraunces (display) and Inter (UI), both self-hosted via `@fontsource-variable`.
+
+- **Tokens live in one file:** `frontend/src/theme/app-preset.ts` (a PrimeNG `definePreset(Aura, …)`). Accent scale, surfaces, radii, fonts and the `--p-app-*` CSS variables used by all components are defined there; change the `ACCENT` scale, `RADIUS` or `FONT` constants to re-skin the app.
+- **Fonts:** also swap the two `@fontsource-variable/*` imports at the top of `frontend/src/styles.scss`.
+- **Global styles:** `frontend/src/styles.scss` (base typography, focus rings, chips/badges, form layout, reduced-motion rules). It contains no colours.
+- **Generated covers:** per-genre hues are in `frontend/src/app/services/book-visuals.ts`.
+- **Theme toggle:** `ThemeService` persists `theme` in localStorage and toggles the `my-app-dark` class on `<html>`.
+
 ## Deployment
 
 ### Production Stack (Docker Compose)
