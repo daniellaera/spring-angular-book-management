@@ -1,47 +1,46 @@
-import {Component, computed, OnInit, signal, ChangeDetectionStrategy} from '@angular/core';
-import {Book} from '../../models/book.model';
-import {ActivatedRoute, Router} from '@angular/router';
-import {BookService} from '../../services/book.service';
-import {ConfirmationService, MessageService, PrimeTemplate} from 'primeng/api';
-import {CardModule} from 'primeng/card';
-import {TagModule} from 'primeng/tag';
-import {DividerModule} from 'primeng/divider';
-import {CommonModule, NgOptimizedImage} from '@angular/common';
-import {FormsModule} from '@angular/forms';
-import {ButtonModule} from 'primeng/button';
-import {DatePickerModule} from 'primeng/datepicker';
-import {ConfirmDialogModule} from 'primeng/confirmdialog';
-import {ToastModule} from 'primeng/toast';
-import {DialogModule} from 'primeng/dialog';
-import {CommentForm} from '../../components/comment-form/comment-form';
-import {AuthService} from '../../services/auth.service';
-import {RatingForm} from '../../components/rating-form/rating-form';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ConfirmationService, MessageService } from 'primeng/api';
+import { ButtonModule } from 'primeng/button';
+import { DatePickerModule } from 'primeng/datepicker';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { ToastModule } from 'primeng/toast';
+import { DialogModule } from 'primeng/dialog';
+
+import { Book } from '../../models/book.model';
+import { BookService } from '../../services/book.service';
+import { AuthService } from '../../services/auth.service';
+import { ChatUiService } from '../../services/chat-ui.service';
+import { genreDot } from '../../services/book-visuals';
+import { BookCover } from '../../components/book-cover/book-cover';
+import { CommentForm } from '../../components/comment-form/comment-form';
+import { RatingForm } from '../../components/rating-form/rating-form';
 
 @Component({
   selector: 'app-book-detail',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    CommonModule,
-    NgOptimizedImage,
-    FormsModule,
-    CardModule,
-    ButtonModule,
-    DatePickerModule,
-    TagModule,
-    DividerModule,
-    ConfirmDialogModule,
-    ToastModule,
-    DialogModule,
-    CommentForm,
-    RatingForm
+    DatePipe, FormsModule, RouterLink,
+    ButtonModule, DatePickerModule, ConfirmDialogModule, ToastModule, DialogModule,
+    BookCover, CommentForm, RatingForm
   ],
   templateUrl: './book-detail.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
-  styleUrl: './book-detail.scss',
+  styleUrl: './book-detail.scss'
 })
 export class BookDetail implements OnInit {
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private bookService = inject(BookService);
+  protected authService = inject(AuthService);
+  private confirmationService = inject(ConfirmationService);
+  private messageService = inject(MessageService);
+  private chat = inject(ChatUiService);
+
   book = signal<Book | null>(null);
   loading = signal(true);
-  borrowDates = signal<Date[] | null>(null);
+  loadFailed = signal(false);
   showBorrowDialog = signal(false);
   selectedBorrowDates = signal<Date[] | null>(null);
   minDate = new Date(); // Can't borrow in the past
@@ -57,17 +56,22 @@ export class BookDetail implements OnInit {
 
   hasBorrow = computed(() => {
     const currentBook = this.book();
-    return currentBook?.borrow && !currentBook.borrow.isReturned;
+    return !!(currentBook?.borrow && !currentBook.borrow.isReturned);
   });
 
-  constructor(
-    private route: ActivatedRoute,
-    private router: Router,
-    private bookService: BookService,
-    protected authService: AuthService,
-    private confirmationService: ConfirmationService,
-    private messageService: MessageService
-  ) {}
+  protected isBorrower = computed(() => {
+    const currentBook = this.book();
+    const currentUserId = this.authService.userDetails().userId;
+    return !!(currentBook?.borrow
+      && !currentBook.borrow.isReturned
+      && currentBook.borrow.userId === currentUserId);
+  });
+
+  protected stars = computed(() => {
+    const rounded = Math.round(this.book()?.averageRating ?? 0);
+    return [1, 2, 3, 4, 5].map(n => n <= rounded);
+  });
+  protected dot = computed(() => genreDot(this.book()?.genre));
 
   ngOnInit(): void {
     const bookId = this.route.snapshot.params['id'];
@@ -127,19 +131,11 @@ export class BookDetail implements OnInit {
 
   loadBookDetails(bookId: number): void {
     this.loading.set(true);
+    this.loadFailed.set(false);
 
     this.bookService.getBookById(bookId).subscribe({
       next: (book) => {
         this.book.set(book);
-
-        // Set borrow dates if exists
-        if (book.borrow && !book.borrow.isReturned) {
-          this.borrowDates.set([
-            new Date(book.borrow.borrowStartDate),
-            new Date(book.borrow.borrowEndDate)
-          ]);
-        }
-
         this.loading.set(false);
       },
       error: (error) => {
@@ -149,6 +145,7 @@ export class BookDetail implements OnInit {
           summary: 'Error',
           detail: 'Failed to load book details'
         });
+        this.loadFailed.set(true);
         this.loading.set(false);
       }
     });
@@ -156,13 +153,13 @@ export class BookDetail implements OnInit {
 
   confirmDelete(): void {
     this.confirmationService.confirm({
-      message: 'Do you want to delete this book?',
-      header: 'Delete Confirmation',
-      icon: 'pi pi-info-circle',
-      acceptButtonStyleClass: 'p-button-danger p-button-text',
-      rejectButtonStyleClass: 'p-button-text p-button-text',
-      acceptIcon: 'none',
-      rejectIcon: 'none',
+      message: 'Do you want to delete this book? This cannot be undone.',
+      header: 'Delete this book?',
+      icon: 'pi pi-trash',
+      acceptLabel: 'Delete',
+      rejectLabel: 'Keep it',
+      acceptButtonProps: { severity: 'danger' },
+      rejectButtonProps: { severity: 'secondary', outlined: true },
       accept: () => {
         this.deleteBook();
       }
@@ -193,31 +190,13 @@ export class BookDetail implements OnInit {
     });
   }
 
-  goBack(): void {
-    this.router.navigate(['/']).then(r => console.info('navigated->>>', r));
+  askAssistant(): void {
+    const b = this.book();
+    if (b) this.chat.open(`Tell me about "${b.title}" by ${b.author}`);
   }
 
-  formatDate(date: Date | string | null | undefined): string {
-    if (!date) return 'Not available';
-
-    const parsedDate = new Date(date);
-    if (isNaN(parsedDate.getTime())) return 'Invalid date';
-
-    return parsedDate.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  }
-
-  getAvailabilityTag(): { severity: 'success' | 'danger', text: string } {
-    return this.isAvailable()
-      ? { severity: 'success', text: 'Available' }
-      : { severity: 'danger', text: 'Borrowed' };
-  }
-
-  getRatingStars(rating: number): string {
-    return '⭐'.repeat(Math.round(rating));
+  protected initials(name: string | undefined): string {
+    return (name ?? '?').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
   }
 
   protected reloadBook(): void {
@@ -227,23 +206,14 @@ export class BookDetail implements OnInit {
     }
   }
 
-  protected isBorrower = computed(() => {
-    const currentBook = this.book();
-    const currentUserId = this.authService.userDetails().userId;
-    return currentBook?.borrow
-      && !currentBook.borrow.isReturned
-      && currentBook.borrow.userId === currentUserId;
-  });
-
   protected confirmReturn(): void {
     this.confirmationService.confirm({
       message: 'Do you want to return this book?',
-      header: 'Return Confirmation',
+      header: 'Return this book?',
       icon: 'pi pi-undo',
-      acceptButtonStyleClass: 'p-button-warning p-button-text',
-      rejectButtonStyleClass: 'p-button-text',
-      acceptIcon: 'none',
-      rejectIcon: 'none',
+      acceptLabel: 'Return',
+      rejectLabel: 'Cancel',
+      rejectButtonProps: { severity: 'secondary', outlined: true },
       accept: () => {
         this.returnBook();
       }

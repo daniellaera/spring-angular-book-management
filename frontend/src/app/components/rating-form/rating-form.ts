@@ -1,5 +1,4 @@
-import { Component, Input, Output, EventEmitter, signal, computed, ChangeDetectionStrategy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, input, output, signal, computed, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 
@@ -22,7 +21,6 @@ interface Rating {
   selector: 'app-rating-form',
   standalone: true,
   imports: [
-    CommonModule,
     FormsModule,
     RatingModule,
     ButtonModule,
@@ -31,14 +29,14 @@ interface Rating {
   ],
   providers: [MessageService],
   templateUrl: './rating-form.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './rating-form.scss'
 })
 export class RatingForm {
-  @Input() sessionUserId!: number;
-  @Input() bookId!: number;
-  @Input() bookRatings: Rating[] | null | undefined = [];
-  @Output() ratingAdded = new EventEmitter<void>();
+  sessionUserId = input.required<number>();
+  bookId = input.required<number>();
+  bookRatings = input<Rating[] | null | undefined>([]);
+  ratingAdded = output<void>();
 
   ratingValue = signal<number | null>(null);
   isSubmitting = signal(false);
@@ -47,7 +45,7 @@ export class RatingForm {
   // Check if user has already rated this book
   canRate = computed(() => {
     if (!this.authService.isLoggedIn()) return false;
-    return !this.bookRatings?.some(rating => rating.userId === this.sessionUserId);
+    return !this.bookRatings()?.some(rating => rating.userId === this.sessionUserId());
   });
 
   constructor(
@@ -72,7 +70,7 @@ export class RatingForm {
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
 
-    const apiUrl = `${environment.apiUrl}/rating/${this.bookId}`;
+    const apiUrl = `${environment.apiUrl}/rating/${this.bookId()}`;
 
     this.http.post(apiUrl, { score }).subscribe({
       next: () => {

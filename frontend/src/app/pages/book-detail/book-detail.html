@@ -1,263 +1,158 @@
-<div class="book-detail-container">
+<div class="page container">
+
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a routerLink="/books"><i class="pi pi-arrow-left" aria-hidden="true"></i> Library</a>
+  </nav>
+
   @if (loading()) {
-    <div class="flex align-items-center justify-content-center" style="min-height: 400px">
-      <i class="pi pi-spin pi-spinner text-4xl text-primary"></i>
+    <div class="detail" aria-busy="true" aria-label="Loading book">
+      <div class="skeleton sk-cover"></div>
+      <div class="detail__main">
+        <div class="skeleton sk-line" style="width: 30%"></div>
+        <div class="skeleton sk-line sk-line--xl" style="width: 80%"></div>
+        <div class="skeleton sk-line" style="width: 40%"></div>
+        <div class="skeleton sk-line" style="width: 95%"></div>
+        <div class="skeleton sk-line" style="width: 90%"></div>
+      </div>
     </div>
-  } @else if (book()) {
-    <p-card class="book-detail-card">
-      <!-- Header Image -->
-      <ng-template pTemplate="header">
-        <img
-          [ngSrc]="book()!.image || 'https://picsum.photos/800/300?random=' + book()!.id"
-          alt="Book cover"
-          width="800"
-          height="300"
-          priority
-          class="header-image" />
-      </ng-template>
+  } @else if (loadFailed() || !book()) {
+    <div class="state panel">
+      <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
+      <h1>This book could not be loaded</h1>
+      <p class="muted">It may have been removed, or the connection failed.</p>
+      <p-button label="Back to the library" icon="pi pi-arrow-left" routerLink="/books" />
+    </div>
+  } @else {
+    @let b = book()!;
 
-      <!-- Title & Availability -->
-      <ng-template pTemplate="title">
-        <div class="flex justify-content-between align-items-center flex-wrap gap-3">
-          <div>
-            <h1 class="text-4xl font-bold m-0">{{ book()!.title }}</h1>
-            <p class="text-xl text-color-secondary mt-2">by {{ book()!.author }}</p>
-          </div>
-          <p-tag
-            [value]="getAvailabilityTag().text"
-            [severity]="getAvailabilityTag().severity"
-            [rounded]="true"
-            class="text-lg px-3 py-2">
-          </p-tag>
-        </div>
-      </ng-template>
+    <article class="detail rise">
+      <div class="detail__cover">
+        <app-book-cover [book]="b" size="lg" [decorative]="false" />
+      </div>
 
-      <!-- Book Details -->
-      <ng-template pTemplate="content">
-        <div class="grid">
-          <!-- Left Column - Details -->
-          <div class="col-12 lg:col-8">
-            <div class="detail-section">
-              <h3 class="text-2xl font-semibold mb-3">
-                <i class="pi pi-info-circle mr-2"></i>
-                Book Information
-              </h3>
+      <div class="detail__main">
+        @if (b.genre) {
+          <p class="eyebrow"><span class="dot" [style.background]="dot()" aria-hidden="true"></span> {{ b.genre }}</p>
+        }
+        <h1 class="detail__title">{{ b.title }}</h1>
+        <p class="detail__author">by {{ b.author }}</p>
 
-              <div class="info-grid">
-                <div class="info-item">
-                  <span class="info-label">ISBN</span>
-                  <span class="font-mono">{{ book()!.isbn }}</span>
-                </div>
-
-                <div class="info-item">
-                  <span class="info-label">Genre</span>
-                  <p-tag [value]="book()!.genre || 'N/A'" severity="secondary"></p-tag>
-                </div>
-
-                <div class="info-item">
-                  <span class="info-label">Published</span>
-                  <span>{{ formatDate(book()!.publishedDate) }}</span>
-                </div>
-
-                <div class="info-item">
-                  <span class="info-label">Rating</span>
-                  <span class="text-xl">
-                    {{ getRatingStars(book()!.averageRating) }}
-                    <span class="text-color-secondary ml-2">({{ book()!.averageRating }}/5)</span>
-                  </span>
-                </div>
-              </div>
-
-              <p-divider></p-divider>
-
-              <div class="description-section">
-                <h4 class="text-xl font-semibold mb-2">Description</h4>
-                <p class="text-color-secondary line-height-3">
-                  {{ book()!.description }}
-                </p>
-              </div>
-            </div>
-
-            <!-- Comments Section -->
-            @if (book()?.comments && book()!.comments!.length > 0) {
-              <div class="comments-section mt-4">
-                <h3 class="text-2xl font-semibold mb-3">
-                  <i class="pi pi-comments mr-2"></i>
-                  Comments ({{ book()!.comments!.length }})
-                </h3>
-
-                @for (comment of book()!.comments; track $index) {
-                  <div class="comment-card mb-3">
-                    <div class="flex align-items-center gap-2 mb-2">
-                      <i class="pi pi-user text-primary"></i>
-                      <span class="font-semibold">{{ comment.authorFullName }}</span>
-                    </div>
-                    <p class="text-color-secondary m-0">{{ comment.content }}</p>
-                  </div>
-                }
-              </div>
-            }
-
-            <!-- Add Comment Section -->
-            <div class="add-comment-section">
-              <app-comment-form
-                [bookId]="book()!.id"
-                (commentAdded)="reloadBook()">
-              </app-comment-form>
-            </div>
-
-          </div>
-
-          <!-- Right Column - Borrow Info & Ratings -->
-          <div class="col-12 lg:col-4">
-            <!-- Borrow Section -->
-            <div class="borrow-section">
-              <h3 class="text-xl font-semibold mb-3">
-                <i class="pi pi-calendar mr-2"></i>
-                Borrow Status
-              </h3>
-
-              @if (hasBorrow()) {
-                <div class="borrow-info-card">
-                  <p class="font-semibold mb-3">Currently Borrowed</p>
-
-                  <p-datepicker
-                    [(ngModel)]="borrowDates"
-                    selectionMode="range"
-                    [inline]="true"
-                    [showWeek]="true"
-                    [readonlyInput]="true"
-                    [disabled]="true"
-                    dateFormat="dd/mm/yy">
-                  </p-datepicker>
-
-                  <p class="text-sm text-color-secondary mt-2">
-                    Available after {{ formatDate(book()!.borrow!.borrowEndDate) }}
-                  </p>
-
-                  @if (isBorrower()) {
-                    <p-button
-                      label="Return This Book"
-                      icon="pi pi-undo"
-                      severity="warn"
-                      styleClass="w-full mt-3"
-                      (onClick)="confirmReturn()">
-                    </p-button>
-                  }
-                </div>
-              } @else {
-                <div class="available-card">
-                  <i class="pi pi-check-circle text-4xl text-green-500 mb-2"></i>
-                  <p class="font-semibold">Available to Borrow</p>
-
-                  @if (!authService.isLoggedIn()) {
-                    <p class="text-sm text-color-secondary mt-2">
-                      Please log in to borrow this book
-                    </p>
-                  }
-
-                  <p-button
-                    [label]="authService.isLoggedIn() ? 'Borrow This Book' : 'Login to Borrow'"
-                    icon="pi pi-calendar-plus"
-                    styleClass="w-full mt-3"
-                    [disabled]="!authService.isLoggedIn()"
-                    (onClick)="openBorrowDialog()">
-                  </p-button>
-                </div>
-              }
-            </div>
-
-            <!-- Borrow Dialog -->
-            <p-dialog
-              header="Borrow Book"
-              [(visible)]="showBorrowDialog"
-              [modal]="true"
-              [style]="{ width: '450px' }">
-
-              <div class="flex flex-column gap-3">
-                <p>Select the borrow period for <strong>{{ book()?.title }}</strong></p>
-
-                <p-datepicker
-                  [(ngModel)]="selectedBorrowDates"
-                  selectionMode="range"
-                  [inline]="true"
-                  [minDate]="minDate"
-                  [maxDate]="maxDate"
-                  dateFormat="dd/mm/yy">
-                </p-datepicker>
-              </div>
-
-              <ng-template pTemplate="footer">
-                <p-button
-                  label="Cancel"
-                  severity="secondary"
-                  [outlined]="true"
-                  (onClick)="showBorrowDialog.set(false)">
-                </p-button>
-                <p-button
-                  label="Confirm Borrow"
-                  icon="pi pi-check"
-                  (onClick)="confirmBorrow()">
-                </p-button>
-              </ng-template>
-            </p-dialog>
-
-            <!-- Submit Rating Section -->
-            <div class="submit-rating-section mt-4">
-              <app-rating-form
-                [sessionUserId]="authService.userDetails().userId ?? 0"
-                [bookId]="book()!.id"
-                [bookRatings]="book()!.ratings"
-                (ratingAdded)="reloadBook()">
-              </app-rating-form>
-            </div>
-
-            <!-- Ratings Section -->
-            @if (book()?.ratings && book()!.ratings!.length > 0) {
-              <div class="ratings-section mt-4">
-                <h3 class="text-xl font-semibold mb-3">
-                  <i class="pi pi-star-fill mr-2" style="color: #fbbf24"></i>
-                  Ratings
-                </h3>
-
-                @for (rating of book()!.ratings; track $index) {
-                  <div class="rating-item">
-        <span class="rating-stars">
-          {{ getRatingStars(rating.score) }}
-        </span>
-                    <span class="text-color-secondary ml-2">({{ rating.score }}/5)</span>
-                  </div>
-                }
-              </div>
-            }
-          </div>
-        </div>
-      </ng-template>
-
-      <!-- Footer Actions -->
-      <ng-template pTemplate="footer">
-        <div class="flex justify-content-between flex-wrap gap-2">
-          <p-button
-            label="Back to Books"
-            icon="pi pi-arrow-left"
-            [outlined]="true"
-            (onClick)="goBack()">
-          </p-button>
-
-          @if (isOwner()) {
-            <p-button
-              label="Delete Book"
-              icon="pi pi-trash"
-              severity="danger"
-              [outlined]="true"
-              (onClick)="confirmDelete()">
-            </p-button>
+        <div class="detail__meta">
+          @if (b.averageRating) {
+            <span class="stars" role="img" [attr.aria-label]="'Rated ' + b.averageRating + ' out of 5'">
+              @for (on of stars(); track $index) { <i class="pi" [class.pi-star-fill]="on" [class.pi-star]="!on" aria-hidden="true"></i> }
+              <span class="tnum">{{ b.averageRating }}</span>
+            </span>
+          } @else {
+            <span class="muted">No ratings yet</span>
+          }
+          @if (b.publishedDate) { <span class="muted tnum">{{ b.publishedDate | date: 'yyyy' }}</span> }
+          @if (isAvailable()) {
+            <span class="badge badge--ok"><i class="pi pi-check-circle" aria-hidden="true"></i>Available</span>
+          } @else {
+            <span class="badge badge--busy"><i class="pi pi-clock" aria-hidden="true"></i>Borrowed</span>
           }
         </div>
+
+        @if (b.description) { <p class="detail__desc">{{ b.description }}</p> }
+
+        <div class="detail__actions">
+          @if (!hasBorrow()) {
+            <p-button [label]="authService.isLoggedIn() ? 'Borrow this book' : 'Sign in to borrow'"
+                      icon="pi pi-calendar-plus" size="large"
+                      [disabled]="!authService.isLoggedIn()" (onClick)="openBorrowDialog()" />
+          } @else if (isBorrower()) {
+            <p-button label="Return this book" icon="pi pi-undo" severity="warn" size="large" (onClick)="confirmReturn()" />
+          }
+          <p-button label="Ask AI about this book" icon="pi pi-sparkles" severity="secondary" [outlined]="true" size="large" (onClick)="askAssistant()" />
+          @if (isOwner()) {
+            <p-button label="Delete" icon="pi pi-trash" severity="danger" [text]="true" size="large" (onClick)="confirmDelete()" />
+          }
+        </div>
+
+        @if (!authService.isLoggedIn() && !hasBorrow()) {
+          <p class="muted small"><a routerLink="/login">Sign in</a> to borrow, rate or comment.</p>
+        }
+
+        @if (hasBorrow()) {
+          <p class="borrow-note panel">
+            <i class="pi pi-calendar" aria-hidden="true"></i>
+            <span>
+              Borrowed @if (b.borrow?.borrowStartDate) { from <strong class="tnum">{{ b.borrow?.borrowStartDate | date: 'd MMM' }}</strong> }
+              until <strong class="tnum">{{ b.borrow?.borrowEndDate | date: 'd MMM yyyy' }}</strong>.
+              Available again after that date.
+            </span>
+          </p>
+        }
+      </div>
+    </article>
+
+    <div class="cols">
+      <div class="cols__main">
+        <section class="block" aria-labelledby="comments-title">
+          <h2 id="comments-title" class="block__title">Comments @if (b.comments?.length) { <span class="count tnum">{{ b.comments!.length }}</span> }</h2>
+
+          @if (b.comments?.length) {
+            <ul class="comments">
+              @for (comment of b.comments; track $index) {
+                <li class="comment panel">
+                  <span class="comment__avatar" aria-hidden="true">{{ initials(comment.authorFullName) }}</span>
+                  <div>
+                    <p class="comment__author">{{ comment.authorFullName }}</p>
+                    <p class="comment__text">{{ comment.content }}</p>
+                  </div>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="muted">No comments yet. Be the first to share a thought.</p>
+          }
+
+          <div class="panel form-panel">
+            <app-comment-form [bookId]="b.id" (commentAdded)="reloadBook()" />
+          </div>
+        </section>
+      </div>
+
+      <aside class="cols__side">
+        <section class="block panel facts" aria-labelledby="facts-title">
+          <h2 id="facts-title" class="block__title block__title--sm">Details</h2>
+          <dl>
+            <div><dt>ISBN</dt><dd class="tnum">{{ b.isbn }}</dd></div>
+            <div><dt>Genre</dt><dd>{{ b.genre || '—' }}</dd></div>
+            <div><dt>Published</dt><dd class="tnum">{{ b.publishedDate ? (b.publishedDate | date: 'd MMMM yyyy') : '—' }}</dd></div>
+            @if (b.userDTO?.fullName) { <div><dt>Added by</dt><dd>{{ b.userDTO?.fullName }}</dd></div> }
+          </dl>
+        </section>
+
+        <section class="block panel" aria-labelledby="ratings-title">
+          <h2 id="ratings-title" class="block__title block__title--sm">Rate this book</h2>
+          <app-rating-form
+            [sessionUserId]="authService.userDetails().userId ?? 0"
+            [bookId]="b.id"
+            [bookRatings]="b.ratings"
+            (ratingAdded)="reloadBook()" />
+          @if (b.ratings?.length) {
+            <p class="muted small ratings-count tnum">{{ b.ratings!.length }} {{ b.ratings!.length === 1 ? 'rating' : 'ratings' }}, average {{ b.averageRating }}/5</p>
+          }
+        </section>
+      </aside>
+    </div>
+
+    <p-dialog header="Borrow this book" [(visible)]="showBorrowDialog" [modal]="true" [draggable]="false"
+              [style]="{ width: 'min(94vw, 420px)' }" [closable]="true" [dismissableMask]="true">
+      <div class="dialog-body">
+        <p>Choose the borrow period for <strong>{{ b.title }}</strong> (up to 3 months).</p>
+        <p-datepicker [(ngModel)]="selectedBorrowDates" selectionMode="range" [inline]="true"
+                      [minDate]="minDate" [maxDate]="maxDate" dateFormat="dd/mm/yy" />
+      </div>
+      <ng-template #footer>
+        <p-button label="Cancel" severity="secondary" [outlined]="true" (onClick)="showBorrowDialog.set(false)" />
+        <p-button label="Confirm borrow" icon="pi pi-check" (onClick)="confirmBorrow()" />
       </ng-template>
-    </p-card>
+    </p-dialog>
   }
 </div>
 
-<p-toast></p-toast>
-<p-confirmdialog></p-confirmdialog>
+<p-toast />
+<p-confirmdialog />

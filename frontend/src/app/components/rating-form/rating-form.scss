@@ -1,19 +1,5 @@
-.rating-form {
-  margin-top: 2rem;
-  padding: 1.5rem;
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
-  background: var(--surface-50);
-
-  .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  ::ng-deep .p-rating {
-    .p-rating-option {
-      font-size: 2rem;
-    }
-  }
-}
+:host { display: block; }
+.rating-form__field { display: grid; gap: 0.9rem; justify-items: start; }
+.rating-form__label { font-weight: 600; font-size: 0.9rem; color: var(--p-app-muted); }
+.muted i { margin-right: 0.4rem; }
+p-button, ::ng-deep .rating-form__field .p-button { width: 100%; }

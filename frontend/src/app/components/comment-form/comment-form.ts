@@ -1,5 +1,4 @@
-import { Component, Input, Output, EventEmitter, signal, ChangeDetectionStrategy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, input, output, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 
@@ -14,19 +13,18 @@ import { Textarea } from 'primeng/textarea';
   selector: 'app-comment-form',
   standalone: true,
   imports: [
-    CommonModule,
     FormsModule,
     ButtonModule,
     MessageModule,
     Textarea
   ],
   templateUrl: './comment-form.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './comment-form.scss'
 })
 export class CommentForm {
-  @Input() bookId!: number;
-  @Output() commentAdded = new EventEmitter<void>();
+  bookId = input.required<number>();
+  commentAdded = output<void>();
 
   commentContent = signal('');
   isSubmitting = signal(false);
@@ -59,7 +57,7 @@ export class CommentForm {
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
 
-    const apiUrl = `${environment.apiUrl}/comment/${this.bookId}`;
+    const apiUrl = `${environment.apiUrl}/comment/${this.bookId()}`;
 
     this.http.post(apiUrl, { content }).subscribe({
       next: () => {

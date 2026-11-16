@@ -1,38 +1,15 @@
-<div class="comment-form">
-  <textarea
-    pInputTextarea
-    [(ngModel)]="commentContent"
-    placeholder="Write your comment..."
-    rows="3"
-    maxlength="500"
-    class="w-full"
-    [disabled]="isSubmitting()">
-  </textarea>
-
-  <div class="flex justify-content-between align-items-center mt-2">
-    <small class="text-color-secondary">
-      {{ commentContent().length }}/500 characters
-    </small>
+<form class="comment-form" (submit)="$event.preventDefault(); submitComment()">
+  <label for="comment-text" class="comment-form__label">Add a comment</label>
+  <textarea pTextarea id="comment-text" name="comment" [(ngModel)]="commentContent" placeholder="What did you think of it?"
+            rows="3" maxlength="500" [disabled]="isSubmitting()" [attr.aria-describedby]="'comment-count'"></textarea>
+  <div class="comment-form__row">
+    <small id="comment-count" class="muted tnum">{{ commentContent().length }}/500</small>
+    <p-button type="submit" [label]="getButtonLabel()" icon="pi pi-send" [disabled]="isSubmitDisabled()" [loading]="isSubmitting()" />
   </div>
-
-  <p-button
-    [label]="getButtonLabel()"
-    icon="pi pi-send"
-    [disabled]="isSubmitDisabled()"
-    [loading]="isSubmitting()"
-    (onClick)="submitComment()"
-    styleClass="w-full mt-3">
-  </p-button>
-
   @if (errorMessage()) {
-    <p-message severity="error" styleClass="mt-2 w-full">
-      {{ errorMessage() }}
-    </p-message>
+    <p-message severity="error" size="small" variant="simple">{{ errorMessage() }}</p-message>
   }
-
   @if (!authService.isLoggedIn()) {
-    <p-message severity="warn" styleClass="mt-2 w-full">
-      Please log in to post a comment.
-    </p-message>
+    <p class="muted small"><i class="pi pi-lock" aria-hidden="true"></i> Sign in to post a comment.</p>
   }
-</div>
+</form>
