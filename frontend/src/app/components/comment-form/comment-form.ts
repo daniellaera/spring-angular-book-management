@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, signal } from '@angular/core';
+import { Component, Input, Output, EventEmitter, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
@@ -21,6 +21,7 @@ import { Textarea } from 'primeng/textarea';
     Textarea
   ],
   templateUrl: './comment-form.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './comment-form.scss'
 })
 export class CommentForm {

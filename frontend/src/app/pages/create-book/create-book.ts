@@ -1,4 +1,4 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -40,6 +40,7 @@ interface BookForm {
   ],
   providers: [MessageService],
   templateUrl: './create-book.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './create-book.scss'
 })
 export class CreateBook implements OnInit {

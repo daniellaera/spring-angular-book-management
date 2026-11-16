@@ -121,7 +121,7 @@
                 <div class="borrow-info-card">
                   <p class="font-semibold mb-3">Currently Borrowed</p>
 
-                  <p-datePicker
+                  <p-datepicker
                     [(ngModel)]="borrowDates"
                     selectionMode="range"
                     [inline]="true"
@@ -129,7 +129,7 @@
                     [readonlyInput]="true"
                     [disabled]="true"
                     dateFormat="dd/mm/yy">
-                  </p-datePicker>
+                  </p-datepicker>
 
                   <p class="text-sm text-color-secondary mt-2">
                     Available after {{ formatDate(book()!.borrow!.borrowEndDate) }}
@@ -177,14 +177,14 @@
               <div class="flex flex-column gap-3">
                 <p>Select the borrow period for <strong>{{ book()?.title }}</strong></p>
 
-                <p-datePicker
+                <p-datepicker
                   [(ngModel)]="selectedBorrowDates"
                   selectionMode="range"
                   [inline]="true"
                   [minDate]="minDate"
                   [maxDate]="maxDate"
                   dateFormat="dd/mm/yy">
-                </p-datePicker>
+                </p-datepicker>
               </div>
 
               <ng-template pTemplate="footer">
@@ -260,4 +260,4 @@
 </div>
 
 <p-toast></p-toast>
-<p-confirmDialog></p-confirmDialog>
+<p-confirmdialog></p-confirmdialog>

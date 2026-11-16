@@ -1,4 +1,4 @@
-import {Component, computed, OnInit, signal} from '@angular/core';
+import {Component, computed, OnInit, signal, ChangeDetectionStrategy} from '@angular/core';
 import {Book} from '../../models/book.model';
 import {ActivatedRoute, Router} from '@angular/router';
 import {BookService} from '../../services/book.service';
@@ -35,6 +35,7 @@ import {RatingForm} from '../../components/rating-form/rating-form';
     RatingForm
   ],
   templateUrl: './book-detail.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './book-detail.scss',
 })
 export class BookDetail implements OnInit {

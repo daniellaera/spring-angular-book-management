@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
@@ -11,6 +11,7 @@ import { AuthService } from '../../services/auth.service';
   standalone: true,
   imports: [CommonModule, ProgressSpinnerModule],
   templateUrl: './github-callback.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './github-callback.scss'
 })
 export class GithubCallback implements OnInit {

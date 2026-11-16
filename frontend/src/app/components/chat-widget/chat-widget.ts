@@ -1,4 +1,4 @@
-import { Component, ViewChild, ElementRef, signal, computed } from '@angular/core';
+import { Component, ViewChild, ElementRef, signal, computed, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
@@ -14,6 +14,7 @@ import { InputText } from 'primeng/inputtext';
   standalone: true,
   imports: [CommonModule, FormsModule, ButtonModule, BadgeModule, TooltipModule, InputText],
   templateUrl: './chat-widget.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './chat-widget.scss'
 })
 export class ChatWidget {

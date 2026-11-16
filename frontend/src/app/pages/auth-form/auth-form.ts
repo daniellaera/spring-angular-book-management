@@ -1,4 +1,4 @@
-import { Component, signal, OnInit } from '@angular/core';
+import { Component, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -27,6 +27,7 @@ import {GithubService} from '../../services/github.service';
     DividerModule
   ],
   templateUrl: './auth-form.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './auth-form.scss'
 })
 export class AuthForm implements OnInit {

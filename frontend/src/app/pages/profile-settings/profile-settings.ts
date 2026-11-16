@@ -1,4 +1,4 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -29,6 +29,7 @@ import { environment } from '../../../environments/environment';
   ],
   providers: [MessageService],
   templateUrl: './profile-settings.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './profile-settings.scss'
 })
 export class ProfileSettings implements OnInit {

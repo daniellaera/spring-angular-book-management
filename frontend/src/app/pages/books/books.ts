@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, ViewChild, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -32,6 +32,7 @@ import { Book } from '../../models/book.model';
     TooltipModule
   ],
   templateUrl: './books.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './books.scss'
 })
 export class Books implements OnInit {

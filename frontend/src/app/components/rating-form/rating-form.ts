@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, signal, computed } from '@angular/core';
+import { Component, Input, Output, EventEmitter, signal, computed, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
@@ -31,6 +31,7 @@ interface Rating {
   ],
   providers: [MessageService],
   templateUrl: './rating-form.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './rating-form.scss'
 })
 export class RatingForm {
