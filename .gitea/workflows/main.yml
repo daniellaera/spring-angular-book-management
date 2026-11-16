@@ -6,7 +6,11 @@ on:
 
 permissions:
   contents: write
-  packages: write  # Required for GHCR
+  packages: write  # push images to the Gitea container registry
+
+env:
+  REGISTRY_HOST: 192.168.1.103:3000
+  REGISTRY: 192.168.1.103:3000/daniellaera   # <gitea-host>/<owner>
 
 jobs:
   # 1. Filters which parts (backend/frontend) have changed
@@ -32,7 +36,7 @@ jobs:
             frontend:
               - 'frontend/**'
 
-  # 2. Backend Build, Test, and Push to Nexus
+  # 2. Backend Build and Test
   build-and-test-backend:
     name: Build and Test Application (Backend)
     runs-on: ubuntu-latest
@@ -42,11 +46,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Configure Maven Settings
-        run: |
-          mkdir -p ~/.m2
-          echo "${{ secrets.MAVEN_SETTINGS_XML }}" | base64 --decode > ~/.m2/settings.xml
 
       # Generate version BEFORE build
       - name: Set Version
@@ -59,10 +58,6 @@ jobs:
       - name: Build and Test Backend
         working-directory: ./backend
         run: mvn clean verify
-
-      - name: Deploy to Nexus
-        working-directory: ./backend
-        run: mvn clean deploy -Prelease
 
       # ❌ Disabled on Gitea:
       # - name: Upload JaCoCo Coverage Report (Backend)
@@ -116,25 +111,20 @@ jobs:
         run: npm run test -- --watch=false
 
   dockerize-and-deploy:
-    name: Build Images & Deploy to Gitea
+    name: Build Images, Push to Gitea Registry & Deploy
     runs-on: ubuntu-latest
     container: 192.168.1.103:3000/daniellaera/ci-java21-node24:24.04-1
     needs: [ build-and-test-backend, build-and-test-frontend ]
     steps:
       - uses: actions/checkout@v4
 
-      # ⚠️ Decode Maven settings and place inside backend context for Dockerfile use
-      - name: Prepare Maven settings for Docker
-        run: |
-          mkdir -p backend/.m2
-          echo "${{ secrets.MAVEN_SETTINGS_XML }}" | base64 --decode > backend/.m2/settings.xml
-
-      - name: Log in to Nexus
-        uses: docker/login-action@v3
-        with:
-          registry: docker.nexus.daniellaera.com
-          username: ${{ secrets.NEXUS_USER }}
-          password: ${{ secrets.NEXUS_PASSWORD }}
+      # Push credentials: the built-in Actions token (package write). If Gitea rejects it, add the secrets
+      # GITEA_PUSH_USER + GITEA_PUSH_TOKEN (token with only write:package) and this step uses them automatically.
+      - name: Log in to the Gitea container registry
+        env:
+          REG_USER: ${{ secrets.GITEA_PUSH_USER || github.actor }}
+          REG_TOKEN: ${{ secrets.GITEA_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: echo "$REG_TOKEN" | docker login "$REGISTRY_HOST" -u "$REG_USER" --password-stdin
 
       - name: Generate Version
         id: version
@@ -147,28 +137,28 @@ jobs:
           docker build \
             --platform linux/amd64 \
             --build-arg APP_VERSION=${{ steps.version.outputs.version }} \
-            -t docker.nexus.daniellaera.com/book-backend:latest \
-            -t docker.nexus.daniellaera.com/book-backend:${{ steps.version.outputs.version }} \
-            -t docker.nexus.daniellaera.com/book-backend:${{ github.sha }} \
+            -t ${REGISTRY}/book-backend:latest \
+            -t ${REGISTRY}/book-backend:${{ steps.version.outputs.version }} \
+            -t ${REGISTRY}/book-backend:${{ github.sha }} \
             ./backend
 
       - name: Push Backend Image
         run: |
-          docker push docker.nexus.daniellaera.com/book-backend:latest
-          docker push docker.nexus.daniellaera.com/book-backend:${{ github.sha }}
+          docker push ${REGISTRY}/book-backend:latest
+          docker push ${REGISTRY}/book-backend:${{ github.sha }}
 
       - name: Build Frontend Image
         run: |
           docker build \
             --platform linux/amd64 \
-            -t docker.nexus.daniellaera.com/book-frontend:latest \
-            -t docker.nexus.daniellaera.com/book-frontend:${{ github.sha }} \
+            -t ${REGISTRY}/book-frontend:latest \
+            -t ${REGISTRY}/book-frontend:${{ github.sha }} \
             ./frontend
 
       - name: Push Frontend Image
         run: |
-          docker push docker.nexus.daniellaera.com/book-frontend:latest
-          docker push docker.nexus.daniellaera.com/book-frontend:${{ github.sha }}
+          docker push ${REGISTRY}/book-frontend:latest
+          docker push ${REGISTRY}/book-frontend:${{ github.sha }}
 
       # CI holds only the SSH deploy key + registry credentials. NO application secrets:
       # the LXC pulls them from Infisical at start (see deploy/redeploy.sh, docs/DEPLOYMENT.md).

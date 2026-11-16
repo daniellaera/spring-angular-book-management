@@ -76,7 +76,7 @@ A full-stack book management application with an **AI-powered chat assistant**. 
 - **Docker** — Containerized deployment
 - **Nginx Proxy Manager** — HTTPS reverse proxy
 - **Gitea Actions** — CI/CD pipeline
-- **Nexus** — Docker registry and Maven repository
+- **Gitea container registry** — Docker images
 - **Proxmox** — Self-hosted virtualization
 
 ---
@@ -265,11 +265,11 @@ To use protected endpoints in Swagger:
 ```yaml
 services:
   backend:
-    image: docker.nexus.daniellaera.com/book-backend:latest
+    image: 192.168.1.103:3000/daniellaera/book-backend:latest
     env_file: ./backend.env
     ports: ["8080:8080"]
   frontend:
-    image: docker.nexus.daniellaera.com/book-frontend:latest
+    image: 192.168.1.103:3000/daniellaera/book-frontend:latest
     ports: ["80:80"]
   qdrant:
     image: qdrant/qdrant
@@ -282,7 +282,7 @@ services:
 On push to `main`:
 1. Detect changed files (backend/frontend)
 2. Build and test changed modules
-3. Build Docker images and push to Nexus registry
+3. Build Docker images and push to the Gitea container registry
 4. SSH to server → pull images → `docker compose down && up -d`
 
 ---

@@ -39,7 +39,7 @@ services:
     mem_limit: 512m
 
   book-backend:
-    image: ${REGISTRY:-docker.nexus.daniellaera.com}/book-backend:${BACKEND_TAG:?set by redeploy.sh}
+    image: ${REGISTRY:-192.168.1.103:3000/daniellaera}/book-backend:${BACKEND_TAG:?set by redeploy.sh}
     restart: unless-stopped
     logging: *logging
     depends_on:
@@ -64,7 +64,7 @@ services:
     mem_limit: 1280m
 
   book-frontend:
-    image: ${REGISTRY:-docker.nexus.daniellaera.com}/book-frontend:${FRONTEND_TAG:?set by redeploy.sh}
+    image: ${REGISTRY:-192.168.1.103:3000/daniellaera}/book-frontend:${FRONTEND_TAG:?set by redeploy.sh}
     restart: unless-stopped
     logging: *logging
     depends_on:

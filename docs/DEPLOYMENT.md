@@ -9,7 +9,7 @@ Status of the migration from VM `app-book-dev` (+ separate DB host `book-managem
 | 0-1 Audit, land AI hardening | Done. 75 tests green (run in `maven:3.9.9-temurin-21` with the Docker socket; local JDK 25 breaks Lombok). |
 | 2 Secrets | **Done**: 11 secrets in Infisical (project `book-management`, env `prod`), runtime identity `book-runtime` (Viewer). `DATABASE_URL` and `QDRANT_URL` are NOT in Infisical: fixed in `compose.prod.yml` (internal service names). The tmpfs staging files were shredded. |
 | 3 LXC | **Done**: CT 110 (192.168.1.110, Debian 13, unprivileged, nesting, 2 vCPU/4 GB/20 GB, onboot). |
-| 4 Pipeline | Workflow ready (not pushed, not yet exercised). Needs Gitea secrets `VM_HOST`=192.168.1.110, `VM_USER`=root, `VM_SSH_PORT`=22, `SSH_PRIVATE_KEY` authorised on the LXC, and `NEXUS_PULL_USER/PASSWORD` in Infisical (without them redeploy.sh uses local images only). |
+| 4 Pipeline | Workflow ready (not pushed, not yet exercised). Needs Gitea secrets `VM_HOST`=192.168.1.110, `VM_USER`=root, `VM_SSH_PORT`=22, `SSH_PRIVATE_KEY` authorised on the LXC, and `GITEA_REGISTRY_USER` / `GITEA_REGISTRY_TOKEN` in Infisical (without them redeploy.sh uses local images only). See "Container registry" below. |
 | 5 Data + parallel run | Done, green. |
 | 6 Cutover | Final stop/dump/restore/count-compare done, stack live on `192.168.1.110:8081` with Infisical-injected secrets. NPM upstream switch is a manual step. The old backend container is STOPPED on `app-book-dev` (`docker start book-backend` = rollback). |
 
@@ -25,8 +25,7 @@ on the new stack after cutover is not copied back.
   memory limits, DB bound to 127.0.0.1, `deploy/backup` (systemd timers + restore test), `deploy/db/rotate-password.sh`.
   Secrets come from a non-committed `.env.prod`. **No Infisical usage found in any local repo**, so the Infisical wiring here is new
   (Universal Auth machine identity, read-only), not copied.
-- **Deviations from the brief, on purpose**: images stay on the existing Nexus registry (`docker.nexus.daniellaera.com`) because that is what
-  the working workflow pushes to; moving to the Gitea registry is a one-line `REGISTRY` change in compose + workflow. The existing Gitea secret
+- **Deviations from the brief, on purpose**: images live in the Gitea container registry (`192.168.1.103:3000/daniellaera`). The existing Gitea secret
   names (`VM_HOST`, `VM_USER`, `VM_SSH_PORT`, `SSH_PRIVATE_KEY`) are reused so cutover only means changing their values.
 
 ## Estimate
@@ -41,8 +40,17 @@ on the new stack after cutover is not copied back.
 Internet -> router -> NPM (CT 150, 192.168.1.50) -> http://<LXC>:8081
 LXC book-management (Docker): book-frontend (nginx, :8081) -> book-backend (:8080) -> db (postgres) , qdrant
                                                               \-> Ollama 192.168.1.148:11434 (external), Anthropic API
-CI (Gitea Actions, runner VM 200): test -> build images -> push to Nexus -> scp compose+redeploy.sh -> ssh redeploy.sh <sha>
+CI (Gitea Actions, runner VM 200): test -> build images -> push to Gitea registry -> scp compose+redeploy.sh -> ssh redeploy.sh <sha>
 ```
+
+## Container registry (Gitea)
+- Images: `192.168.1.103:3000/daniellaera/book-backend` and `.../book-frontend`, tagged `<git sha>` and `latest` (`REGISTRY` in the workflow, compose and redeploy.sh).
+- Push (CI): the built-in Actions token (`secrets.GITHUB_TOKEN`, package write). If Gitea rejects it, set the Gitea secrets `GITEA_PUSH_USER` + `GITEA_PUSH_TOKEN` (token scope `write:package` only); the workflow prefers them when present.
+- Pull (CT 110): `redeploy.sh` logs in with `GITEA_REGISTRY_USER` / `GITEA_REGISTRY_TOKEN` from Infisical and logs out on exit.
+- One-time on CT 110: `deploy/setup-registry.sh` (insecure-registries reload + re-tag existing local images).
+- The registry is plain HTTP, so Docker must list it as insecure on every host that pushes or pulls (CT 110 and the runner VM 200):
+  `/etc/docker/daemon.json` -> `{"insecure-registries": ["192.168.1.103:3000"]}` (CT 110: `systemctl reload docker`).
+- Maven: no private repository (Central only): no `distributionManagement`, no `mvn deploy` step, no `MAVEN_SETTINGS_XML` secret.
 
 ## Secrets
 Source of truth: Infisical (192.168.1.163), project `book-management`, env `prod`.
@@ -53,7 +61,7 @@ Source of truth: Infisical (192.168.1.163), project `book-management`, env `prod
 | `JWT_SECRET` | NEW, `openssl rand -base64 64` (JwtService does `Decoders.BASE64.decode`, so Base64 is required; the old one is in a public repo = compromised) |
 | `INDEX_API_TOKEN` | NEW, `openssl rand -hex 32` |
 | `ANTHROPIC_MODEL` | `claude-haiku-5-5` |
-| `NEXUS_PULL_USER`, `NEXUS_PULL_PASSWORD` | read-only registry account used by redeploy.sh |
+| `GITEA_REGISTRY_USER`, `GITEA_REGISTRY_TOKEN` | Gitea user + personal access token with only `read:package`, used by redeploy.sh to pull images |
 `QDRANT_URL` and `DATABASE_URL` are fixed in `deploy/compose.prod.yml` (internal service names).
 
 Runtime access: Universal-Auth machine identity, read-only on this project/env. Credentials live only on the LXC in

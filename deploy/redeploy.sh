@@ -27,9 +27,12 @@ export INFISICAL_TOKEN
 PROJECT_ID="$(cat "$PROJECT_ID_FILE")"
 run_with_secrets() { infisical run --projectId="$PROJECT_ID" --env=prod --silent -- "$@"; }
 
-# --- registry login: only when pull credentials exist in Infisical (NEXUS_PULL_USER/NEXUS_PULL_PASSWORD) ---
-run_with_secrets bash -c 'if [ -n "${NEXUS_PULL_USER:-}" ]; then echo "$NEXUS_PULL_PASSWORD" | docker login "${REGISTRY:-docker.nexus.daniellaera.com}" -u "$NEXUS_PULL_USER" --password-stdin >/dev/null; else echo "no NEXUS_PULL_* in Infisical: using local images only"; fi'
-trap 'docker logout "${REGISTRY:-docker.nexus.daniellaera.com}" >/dev/null 2>&1 || true' EXIT
+# --- registry login (Gitea container registry): pull credentials GITEA_REGISTRY_USER / GITEA_REGISTRY_TOKEN come from Infisical ---
+# REGISTRY is "<gitea-host:port>/<owner>"; docker login needs only the host part.
+export REGISTRY="${REGISTRY:-192.168.1.103:3000/daniellaera}"
+REGISTRY_HOST="${REGISTRY%%/*}"; export REGISTRY_HOST
+run_with_secrets bash -c 'if [ -n "${GITEA_REGISTRY_USER:-}" ] && [ -n "${GITEA_REGISTRY_TOKEN:-}" ]; then echo "$GITEA_REGISTRY_TOKEN" | docker login "$REGISTRY_HOST" -u "$GITEA_REGISTRY_USER" --password-stdin >/dev/null; else echo "no GITEA_REGISTRY_* in Infisical: using local images only"; fi'
+trap 'docker logout "$REGISTRY_HOST" >/dev/null 2>&1 || true' EXIT
 
 PREV_BACKEND="$(cat "$STATE_DIR/backend.tag" 2>/dev/null || true)"
 PREV_FRONTEND="$(cat "$STATE_DIR/frontend.tag" 2>/dev/null || true)"
