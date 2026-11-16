@@ -111,6 +111,11 @@ public class BookServiceImpl implements BookService {
     }
 
     @Override
+    public Page<BookAiView> findAiViewsByTitle(String title, int limit) {
+        return bookRepository.findAiViewsByTitle(title, PageRequest.of(0, limit));
+    }
+
+    @Override
     public Page<BookAiView> findAvailableAiViews(int limit) {
         return bookRepository.findAvailableAiViews(PageRequest.of(0, limit));
     }

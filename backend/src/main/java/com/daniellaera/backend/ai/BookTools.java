@@ -30,7 +30,8 @@ public class BookTools {
 
     public int callsMade() { return calls.get(); }
 
-    @Tool(name = "search_books", description = "Semantic search over the library catalogue by topic, title, author or theme. "
+    @Tool(name = "search_books", description = "Semantic search by TOPIC or THEME (e.g. 'space travel', 'cooking', 'machine learning'); "
+            + "fuzzy, so it can miss a book you name exactly: for a known title use find_by_title, for an author list_by_author. "
             + "Returns up to 'limit' books as id|title|author|rating|available(Y/N). "
             + "Use availableOnly=true for books that can be borrowed now (query may then be empty).")
     public String searchBooks(
@@ -38,6 +39,15 @@ public class BookTools {
             @ToolParam(description = "Max results, 1-15 (default 8)", required = false) Integer limit,
             @ToolParam(description = "Only books currently available to borrow", required = false) Boolean availableOnly) {
         return run("search_books", () -> service.searchBooks(query, limit, availableOnly));
+    }
+
+    @Tool(name = "find_by_title", description = "Find books by title or part of a title (case-insensitive, exact match first). "
+            + "Use it whenever the user names a specific book: who wrote it, is it available, its rating or id. "
+            + "Returns the exact total plus up to 'limit' rows as id|title|author|rating|available(Y/N); 0 means it is not in the library.")
+    public String findByTitle(
+            @ToolParam(description = "Book title or part of it, e.g. 'Effective Java' or 'Pragmatic'") String title,
+            @ToolParam(description = "Max results, 1-15 (default 8)", required = false) Integer limit) {
+        return run("find_by_title", () -> service.findByTitle(title, limit));
     }
 
     @Tool(name = "get_book", description = "Full details of one book by its numeric id: title, author, genre, ISBN, "

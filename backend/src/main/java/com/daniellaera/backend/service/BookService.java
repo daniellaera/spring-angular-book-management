@@ -31,6 +31,9 @@ public interface BookService {
 
     Page<BookAiView> findAiViewsByGenre(String genre, int limit);
 
+    /** Case-insensitive "title contains"; an exact title match sorts first. */
+    Page<BookAiView> findAiViewsByTitle(String title, int limit);
+
     Page<BookAiView> findAvailableAiViews(int limit);
 
     long countAvailableBooks();

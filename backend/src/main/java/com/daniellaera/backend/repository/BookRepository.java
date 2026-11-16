@@ -58,5 +58,16 @@ public interface BookRepository extends JpaRepository<Book, Integer>, BookReposi
            countQuery = "SELECT COUNT(b) FROM Book b WHERE b.isAvailable = true")
     Page<BookAiView> findAvailableAiViews(Pageable pageable);
 
+    @Query(value = """
+           SELECT new com.daniellaera.backend.dao.BookAiView(
+               b.id, b.title, b.author, b.isAvailable, b.averageRating
+           )
+           FROM Book b
+           WHERE LOWER(b.title) LIKE LOWER(CONCAT('%', :title, '%'))
+           ORDER BY CASE WHEN LOWER(b.title) = LOWER(:title) THEN 0 ELSE 1 END, b.title
+           """,
+           countQuery = "SELECT COUNT(b) FROM Book b WHERE LOWER(b.title) LIKE LOWER(CONCAT('%', :title, '%'))")
+    Page<BookAiView> findAiViewsByTitle(@Param("title") String title, Pageable pageable);
+
     long countByIsAvailable(Boolean isAvailable);
 }

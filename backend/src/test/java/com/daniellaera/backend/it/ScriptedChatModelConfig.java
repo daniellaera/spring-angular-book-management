@@ -64,6 +64,7 @@ public class ScriptedChatModelConfig {
                     case "list_by_author" -> "{\"author\":\"cormen\"}";
                     case "list_by_genre" -> "{\"genre\":\"program\"}";
                     case "get_book" -> "{\"id\":1}";
+                    case "find_by_title" -> "{\"title\":\"book 2\"}";
                     case "search_books" -> "{\"query\":\"anything\",\"limit\":5}";
                     default -> "{}";
                 };

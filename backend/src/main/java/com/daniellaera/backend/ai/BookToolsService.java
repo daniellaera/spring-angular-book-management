@@ -72,6 +72,13 @@ public class BookToolsService {
         return format(bookService.findAiViewsByAuthor(a, clamp(limit)), "books by author matching '" + a + "'");
     }
 
+    /** Deterministic lookup of a known title (or part of one): case-insensitive contains, exact match first. */
+    public String findByTitle(String title, Integer limit) {
+        String t = clean(title);
+        if (t.isEmpty()) return "title is required";
+        return format(bookService.findAiViewsByTitle(t, clamp(limit)), "books with a title matching '" + t + "'");
+    }
+
     public String listByGenre(String genre, Integer limit) {
         String g = clean(genre);
         if (g.isEmpty()) return "genre is required";

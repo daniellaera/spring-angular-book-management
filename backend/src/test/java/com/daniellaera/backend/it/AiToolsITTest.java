@@ -78,9 +78,23 @@ class AiToolsITTest {
     }
 
     @Test
-    void exactlyTheFiveReadOnlyToolsAreRegistered() {
+    void exactlyTheSixReadOnlyToolsAreRegistered() {
         List<String> names = Arrays.stream(bookMcpTools.getToolCallbacks()).map(c -> c.getToolDefinition().name()).sorted().toList();
-        assertThat(names).containsExactly("count_books", "get_book", "list_by_author", "list_by_genre", "search_books");
+        assertThat(names).containsExactly("count_books", "find_by_title", "get_book", "list_by_author", "list_by_genre", "search_books");
+    }
+
+    @Test
+    void findByTitle_isCaseInsensitiveContains_exactMatchFirst_andEmptyWhenAbsent() {
+        // "Dune" is an exact match and "Dune Messiah" only contains it: the exact title must come first
+        User u = userRepository.findAll().get(0);
+        save(u, "Dune Messiah", "Frank Herbert", "Science Fiction", true, null, "ISBN-DUNE2");
+
+        String out = call("find_by_title", "{\"title\":\"dune\"}");
+        assertThat(out).startsWith("2 books with a title matching 'dune'");
+        assertThat(out.indexOf(idDune + "|Dune|")).isLessThan(out.indexOf("Dune Messiah"));
+
+        assertThat(call("find_by_title", "{\"title\":\"CLEAN\"}")).contains(idCleanCode + "|Clean Code|Robert C. Martin|4.0|Y");
+        assertThat(call("find_by_title", "{\"title\":\"The Hobbit\"}")).isEqualTo("0 books with a title matching 'The Hobbit'");
     }
 
     @Test

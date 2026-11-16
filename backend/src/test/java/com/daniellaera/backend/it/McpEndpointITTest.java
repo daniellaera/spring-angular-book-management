@@ -76,11 +76,12 @@ class McpEndpointITTest {
     }
 
     @Test
-    void withToken_listsExactlyTheFiveTools() throws Exception {
+    void withToken_listsExactlyTheSixTools() throws Exception {
         MvcResult r = mockMvc.perform(rpc(LIST).header("Authorization", "Bearer " + TOKEN))
                 .andExpect(status().isOk()).andReturn();
         String body = text(r);
-        assertThat(body).contains("search_books", "get_book", "count_books", "list_by_author", "list_by_genre");
+        assertThat(body).contains("search_books", "find_by_title", "get_book", "count_books", "list_by_author", "list_by_genre");
+        assertThat(body.split("\"name\"", -1).length - 1).isEqualTo(6); // one name per tool, nothing else
         assertThat(body).doesNotContain("delete").doesNotContain("create_book");
     }
 

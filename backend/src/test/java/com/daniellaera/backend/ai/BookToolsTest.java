@@ -63,6 +63,26 @@ class BookToolsTest {
     }
 
     @Test
+    void findByTitle_returnsExactTotalAndRows_andEmptyMeansNotInLibrary() {
+        var rows = List.of(new BookAiView(3, "Effective Java", "Joshua Bloch", true, 4.0));
+        given(bookService.findAiViewsByTitle("Effective Java", 8)).willReturn(new PageImpl<>(rows, PageRequest.of(0, 8), 1));
+        given(bookService.findAiViewsByTitle("the hobbit", 8)).willReturn(new PageImpl<>(List.of()));
+
+        assertThat(service.findByTitle("  Effective   Java ", null))
+                .startsWith("1 books with a title matching 'Effective Java'")
+                .contains("3|Effective Java|Joshua Bloch|4.0|Y");
+        assertThat(service.findByTitle("the hobbit", null)).isEqualTo("0 books with a title matching 'the hobbit'");
+        assertThat(service.findByTitle("  ", null)).isEqualTo("title is required");
+    }
+
+    @Test
+    void searchDescription_pointsToFindByTitleForKnownTitles() throws Exception {
+        var m = BookTools.class.getMethod("searchBooks", String.class, Integer.class, Boolean.class);
+        String d = m.getAnnotation(org.springframework.ai.tool.annotation.Tool.class).description();
+        assertThat(d).contains("TOPIC").contains("find_by_title");
+    }
+
+    @Test
     void limit_isClampedTo15() {
         given(bookService.findAiViewsByGenre("sci-fi", 15)).willReturn(new PageImpl<>(List.of()));
         service.listByGenre("sci-fi", 500);

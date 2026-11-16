@@ -80,7 +80,15 @@ class AiChatToolsITTest {
         String body = ask("how many books are in the library?");
         assertThat(body).contains("total=7").contains("available=6").contains("borrowed=1");
         assertThat(model.toolNamesSeen).containsExactlyInAnyOrder(
-                "search_books", "get_book", "count_books", "list_by_author", "list_by_genre");
+                "search_books", "find_by_title", "get_book", "count_books", "list_by_author", "list_by_genre");
+    }
+
+    @Test
+    void titleQuestion_usesFindByTitle_andSystemPromptTellsTheModelSo() throws Exception {
+        model.reset("find_by_title");
+        String body = ask("who wrote the book called book 2?");
+        assertThat(body).contains("Book 2").contains("Author 0");
+        assertThat(model.systemPrompt).contains("find_by_title").contains("not found");
     }
 
     @Test
