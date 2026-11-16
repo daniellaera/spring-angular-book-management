@@ -80,7 +80,7 @@ Containers receive secrets as environment variables at `up` time (no `.env` on d
 - MCP server: `POST /mcp` with `Authorization: Bearer <MCP_API_TOKEN>` (nginx in the frontend container proxies it to the backend). Connect Claude Code/Desktop and test: `docs/AI.md`.
 - AI eval (15 questions, prints pass/fail, tokens, latency): `deploy/ai-eval.sh https://bookmanagement.daniellaera.com [--fresh]`.
 - After the `fix/title-search` deploy the embedded text changed (lowercased): run the Qdrant reindex once (below) so documents match the lowercased queries; see `docs/AI.md`.
-- Reindex Qdrant: `POST /api/v3/ai/books/index` with header `X-Index-Token` (value from Infisical `INDEX_API_TOKEN`).
+- Reindex Qdrant: automatic (nightly, plus on book create/delete, see `docs/AI.md`). Manual: `POST /api/v3/ai/books/index` with header `X-Index-Token` (value from Infisical `INDEX_API_TOKEN`). Check: `grep 'indexing done'` in the backend logs. The n8n "book-index" workflow is obsolete: disable it after one successful `trigger=scheduled` run.
 
 ## Cutover procedure (used; repeat for any re-do)
 1. `ssh app-book-dev docker stop book-backend`. 2. On the LXC: `deploy/dump-old-db.sh` (needs `/dev/shm/olddb.env`, piped from the old VM backend.env),

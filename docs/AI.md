@@ -93,12 +93,44 @@ curl -s -X POST https://bookmanagement.daniellaera.com/mcp -H "Authorization: Be
   task prefixes did not help (6/32).
 - So both sides are lowercased: `BookVectorIndexService.buildBookText` lowercases the embedded text and `EmbeddingService.embedQuery`
   embeds the normalised (lowercased, whitespace-collapsed) query, the same string that keys the query cache.
-- **After deploying this change run the reindex once** (`POST /api/v3/ai/books/index`, header `X-Index-Token`; the nightly n8n job does it too):
+- **After deploying this change run the reindex once** (`POST /api/v3/ai/books/index`, header `X-Index-Token`; the nightly scheduled run does it too):
   the content hash changes, so all books are re-embedded (32 Ollama calls). Until then queries are lowercased against old documents
   (20/32), which is already better than before.
 - Not a bug: "Qdrant returned 3 results" for a `limit` of 8 means the model passed `limit=3`; Qdrant returns 8 for 8.
   No score threshold (`qdrant.score-threshold: 0`), no filters, the collection holds all 32 points.
 - Exact lookups should not depend on embeddings: that is what `find_by_title`, `list_by_author` and `list_by_genre` are for.
+
+## Indexing: how Qdrant stays in sync
+Three triggers, one code path (`BookVectorIndexService`; point id = book id, writes are upserts, so repeating any of them never duplicates):
+- **scheduled**: `ScheduledBookIndexer`, nightly (replaces the n8n "book-index" workflow). Incremental full run: only new/changed books
+  (SHA-256 `contentHash`) are re-embedded, points of deleted books are removed.
+- **event**: `BookService` publishes `BookChangedEvent` on create/delete; `BookIndexEventListener` (`@TransactionalEventListener(AFTER_COMMIT)`
+  + `@Async` on the single-thread `bookIndexingExecutor`) upserts or deletes just that book. It never slows or fails the HTTP request: errors are one WARN line,
+  the nightly run catches up. No coalescing: the handler always indexes the latest DB state, so repeated events only cost redundant embedding calls.
+  There is no book update endpoint yet; when one is added, publish `BookChangedEvent.Type.UPDATED` from it.
+- **manual**: `POST /api/v3/ai/books/index` (JWT, or `X-Index-Token` = `INDEX_API_TOKEN`), unchanged response shape.
+  If a full run is already in progress the response is `{"result":"Skipped: indexing already in progress", all counters 0}`.
+
+Properties (env var in brackets), defaults in `application.yml`:
+
+| Property | Default | |
+|---|---|---|
+| `app.indexing.scheduled.enabled` [`APP_INDEXING_SCHEDULED_ENABLED`] | `true` | nightly run on/off |
+| `app.indexing.scheduled.cron` [`APP_INDEXING_SCHEDULED_CRON`] | `0 0 0 * * *` | Spring cron, 6 fields |
+| `app.indexing.scheduled.zone` [`APP_INDEXING_SCHEDULED_ZONE`] | empty = JVM default zone | e.g. `Europe/Zurich` |
+| `app.indexing.on-change.enabled` [`APP_INDEXING_ON_CHANGE_ENABLED`] | `true` | on-change indexing on/off (off: deleted books' points are removed by the nightly run) |
+
+Check it in the logs (never contains the token):
+```
+grep "indexing start" / "indexing done" / "indexing skipped" / "indexing failed"
+indexing start trigger=scheduled
+indexing done trigger=scheduled books=32 durationMs=1234 indexed=0 skipped=32 deleted=0 failed=0
+indexing done trigger=event books=1 durationMs=210 bookId=33
+indexing skipped trigger=manual reason=already-running
+indexing failed trigger=event bookId=33 type=CREATED error=... (nightly run will catch up)
+```
+**The n8n "book-index" workflow is obsolete.** Run both in parallel for a few days (safe: idempotent), then disable the n8n
+workflow after one successful `indexing done trigger=scheduled` line in prod.
 
 ## Cost notes
 - Each uncached question costs one model call plus one more per tool round trip (at most 3). Tool results are short rows, so a typical

@@ -30,10 +30,7 @@ A full-stack book management application with an **AI-powered chat assistant**. 
              │  (Haiku)  │ │ (Vectors) │ │ (Embeddings)  │
              └───────────┘ └───────────┘ └───────────────┘
 
-┌──────────────────┐
-│    n8n           │──── Nightly: Fetch books → Generate embeddings → Store in Qdrant
-│ (Workflow Engine)│
-└──────────────────┘
+Indexing runs inside the Spring app: nightly full run + on-change (create/delete) + manual endpoint.
 ```
 
 ## Key Features
@@ -44,7 +41,7 @@ A full-stack book management application with an **AI-powered chat assistant**. 
 - **Book Borrowing** — Track book availability and borrowing history
 - **AI Chat Assistant** — Conversational library assistant powered by Claude Haiku
 - **Semantic Search** — Vector-based book search using Qdrant and Ollama embeddings
-- **Nightly Enrichment** — n8n workflow generates book embeddings on a schedule
+- **Automatic Indexing** — the backend keeps the Qdrant embeddings in sync: nightly scheduled run, immediate on-change indexing, manual endpoint
 - **Cost Protection** — Rate limiting (per user/day), response caching, and feature toggles
 - **Dark Mode** — Toggle between light and dark themes
 - **Swagger UI** — Interactive API documentation at `/swagger-ui.html`
@@ -70,7 +67,6 @@ A full-stack book management application with an **AI-powered chat assistant**. 
 - **Claude Haiku** — Fast, low-cost LLM for natural language answers
 - **Qdrant** — Vector database for semantic book search
 - **Ollama** — Local embedding generation (nomic-embed-text model)
-- **n8n** — Workflow automation for nightly embedding pipeline
 
 ### Infrastructure
 - **Docker** — Containerized deployment
@@ -170,7 +166,11 @@ The backend requires these environment variables (or use `application-dev.yml` f
 | `QDRANT_URL` | Qdrant vector DB URL |
 | `OLLAMA_URL` | Ollama API URL |
 | `ANTHROPIC_MODEL` | Optional. Claude model (default `claude-haiku-5-5`) |
-| `INDEX_API_TOKEN` | Optional. Token for the n8n `/index` call (see below); endpoint token auth is disabled when unset |
+| `INDEX_API_TOKEN` | Optional. Token for the manual `/index` call (see below); endpoint token auth is disabled when unset |
+| `APP_INDEXING_SCHEDULED_ENABLED` | Optional, default `true`. Nightly full reindex |
+| `APP_INDEXING_SCHEDULED_CRON` | Optional, default `0 0 0 * * *` (Spring 6-field cron) |
+| `APP_INDEXING_SCHEDULED_ZONE` | Optional, default empty = JVM default time zone (e.g. `Europe/Zurich`) |
+| `APP_INDEXING_ON_CHANGE_ENABLED` | Optional, default `true`. Index/remove a book right after it is created/deleted |
 
 ---
 
@@ -191,15 +191,21 @@ The AI chat assistant uses a **RAG (Retrieval-Augmented Generation)** pattern:
 - **Feature Toggle** — AI can be enabled/disabled via config
 - **Minimal Context** — Only relevant books sent to Claude (not entire catalog)
 
-### Nightly Embedding Pipeline
+### Indexing (Qdrant embeddings)
 
-An **n8n workflow** runs nightly to keep the vector database in sync:
+The Spring app keeps the vector database in sync itself (the former n8n "book-index" workflow is obsolete):
 
-```
-Schedule (midnight) → Fetch books from API → Generate embeddings via Ollama → Store in Qdrant
-```
+| Trigger | When | What |
+|---------|------|------|
+| `scheduled` | nightly, `app.indexing.scheduled.cron` (default `0 0 0 * * *`, JVM time zone unless `zone` is set) | incremental full run |
+| `event` | right after a book is created or deleted (`app.indexing.on-change.enabled`) | only that book: upsert its point, or delete it |
+| `manual` | `POST /api/v3/ai/books/index` | same incremental full run as the nightly one |
 
-### n8n indexing
+Full runs are guarded in-JVM: if one is already running, the next one is skipped and logged. On-change indexing runs after the
+DB commit on a dedicated single-thread executor; if Ollama or Qdrant are down it logs one WARN line and the nightly run catches up.
+Details and log lines to grep: `docs/AI.md`.
+
+### Manual indexing endpoint
 
 `POST /api/v3/ai/books/index` requires the `USER` authority (browser JWT) **or** the header
 `X-Index-Token` whose value equals the backend env var `INDEX_API_TOKEN`:
