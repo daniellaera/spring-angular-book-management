@@ -2,7 +2,7 @@
 
 The library assistant (`POST /api/v3/ai/books/ask`, `GET /api/v3/ai/books/ask/stream`) is a Claude Haiku 5.5 chat
 (`spring.ai.anthropic`, no temperature/top-p/top-k) that answers by **calling read-only tools** instead of receiving
-a dump of books in the prompt. The same tools are exposed to external agents through an **MCP server**.
+a dump of books in the prompt. The same six tools are exposed to external agents through an **MCP server**.
 
 ```
                          +--------------------------------------+
@@ -22,7 +22,8 @@ Output is compact text: `id|title|author|rating|available(Y/N)`.
 
 | Tool | Arguments | Returns |
 |------|-----------|---------|
-| `search_books` | `query`, `limit` (1-15, default 8), `availableOnly` | semantic matches (Qdrant relevance order); empty query + `availableOnly=true` lists borrowable books |
+| `search_books` | `query`, `limit` (1-15, default 8), `availableOnly` | **semantic** matches by topic/theme (Qdrant relevance order), fuzzy: it can miss a book named exactly, hence `find_by_title`; empty query + `availableOnly=true` lists borrowable books |
+| `find_by_title` | `title`, `limit` | books whose title contains the text (case-insensitive, exact match first) with the exact total; `0` = not in the library. Use for any named book |
 | `get_book` | `id` | id, title, author, genre, ISBN, published, rating, availability, description (300 chars max) |
 | `count_books` | none | `total=N;available=A;borrowed=B` (exact) |
 | `list_by_author` | `author`, `limit` | exact total + up to `limit` rows (case-insensitive partial match) |
@@ -39,7 +40,7 @@ The anonymous stream uses the same tools; they only return public catalogue data
 
 ## MCP server
 - Starter `spring-ai-starter-mcp-server-webmvc` 2.0.0-M2, protocol **STATELESS streamable HTTP**, endpoint `POST /mcp`
-  (JSON-RPC: `tools/list`, `tools/call`). Same five tools, nothing that writes.
+  (JSON-RPC: `tools/list`, `tools/call`). Same six tools, nothing that writes.
 - **Auth**: `Authorization: Bearer <MCP_API_TOKEN>`. Separate from user JWTs and from `INDEX_API_TOKEN` (neither opens `/mcp`, and the
   MCP token opens nothing else). No/wrong token = 401; when `MCP_API_TOKEN` is unset the endpoint is closed for everyone.
   The token is compared by SHA-256 digest in constant time (`config/McpTokenFilter.java`).
@@ -58,7 +59,7 @@ openssl rand -hex 32          # generate the token; put it in Infisical (project
 claude mcp add --transport http book-library https://bookmanagement.daniellaera.com/mcp \
   --header "Authorization: Bearer $MCP_API_TOKEN"
 ```
-Then `/mcp` in Claude Code lists `book-library` with its five tools; ask e.g. "how many books are available?".
+Then `/mcp` in Claude Code lists `book-library` with its six tools; ask e.g. "how many books are available?".
 
 ### Connect Claude Desktop
 Custom connectors in Desktop use OAuth, so use the `mcp-remote` bridge in `claude_desktop_config.json`
@@ -83,6 +84,22 @@ curl -s -X POST https://bookmanagement.daniellaera.com/mcp -H "Authorization: Be
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
+## Semantic search and embeddings (read this before touching the index)
+- Embeddings: Ollama `nomic-embed-text` (768 dims, cosine), one Qdrant point per book (`BookVectorIndexService`).
+- **The model is case-sensitive.** Documents used to be embedded in Title Case and queries in whatever case the user typed, so a
+  Title Case query such as "Effective Java" matched other Title Case texts ("The Great Gatsby") and ranked the real book 27th of 32,
+  while "effective java" ranked it first. Measured on the 32 books with each title as the query: top-1 hit 7/32 (before), 20/32
+  (lowercased query only), **32/32 (documents and queries both lowercased)**. `nomic-embed-text`'s `search_query:` / `search_document:`
+  task prefixes did not help (6/32).
+- So both sides are lowercased: `BookVectorIndexService.buildBookText` lowercases the embedded text and `EmbeddingService.embedQuery`
+  embeds the normalised (lowercased, whitespace-collapsed) query, the same string that keys the query cache.
+- **After deploying this change run the reindex once** (`POST /api/v3/ai/books/index`, header `X-Index-Token`; the nightly n8n job does it too):
+  the content hash changes, so all books are re-embedded (32 Ollama calls). Until then queries are lowercased against old documents
+  (20/32), which is already better than before.
+- Not a bug: "Qdrant returned 3 results" for a `limit` of 8 means the model passed `limit=3`; Qdrant returns 8 for 8.
+  No score threshold (`qdrant.score-threshold: 0`), no filters, the collection holds all 32 points.
+- Exact lookups should not depend on embeddings: that is what `find_by_title`, `list_by_author` and `list_by_genre` are for.
+
 ## Cost notes
 - Each uncached question costs one model call plus one more per tool round trip (at most 3). Tool results are short rows, so a typical
   question is a small system prompt + one or two tool results; the old approach sent 15 book rows every time.
@@ -95,7 +112,7 @@ curl -s -X POST https://bookmanagement.daniellaera.com/mcp -H "Authorization: Be
 - `AiToolsITTest` (each tool, real PostgreSQL), `AiChatToolsITTest` (chat flow with a scripted model that calls the real tool callbacks: exact count,
   call budget, anonymous stream), `McpEndpointITTest` (401 without the token, `tools/list`, `tools/call`), `McpTokenFilterTest`, `BookToolsTest`.
   The integration tests do not call Anthropic; whether the real model picks the right tool is what the eval measures.
-- Eval: `backend/src/test/resources/ai-eval/questions.json` (15 questions, expectations resolved against the live catalogue) and
+- Eval: `backend/src/test/resources/ai-eval/questions.json` (17 questions, expectations resolved against the live catalogue; three of them are title lookups) and
   `deploy/ai-eval.sh [base-url] [--fresh]` (no interaction; signs up a throwaway user unless `AI_EVAL_TOKEN` or `AI_EVAL_EMAIL`/`AI_EVAL_PASSWORD` is set;
   one `/ask` per question against that user's daily limit). Exit code 1 below `AI_EVAL_MIN_PASS` (default: all).
 - Run the tests on JDK 21 (the local JDK 25 breaks Lombok):

@@ -6,7 +6,8 @@
 # Auth (POST /ask needs a user): $AI_EVAL_TOKEN (a JWT), or $AI_EVAL_EMAIL + $AI_EVAL_PASSWORD, or - by default -
 #            a throwaway user ai-eval-<timestamp>@example.invalid is signed up (its email is printed so you can delete it).
 # Expectations are resolved against the live catalogue, so they survive data changes.
-# Output: one line per question (PASS/FAIL, latency, input/output tokens, tool calls), then a summary.
+# Output: one line per question (PASS/FAIL, latency, input/output tokens, tool calls, the answer truncated to 200 chars; the --fresh
+#         "(ref xxxxxx)" nonce is stripped from displayed answers), then a summary.
 # Exit code: 0 when at least $AI_EVAL_MIN_PASS (default: all) questions pass, 1 otherwise. Never prints secrets.
 # Cost note: one /ask per question, counted against that user's daily AI limit (20 by default; the set has 15).
 set -euo pipefail
@@ -31,6 +32,10 @@ command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 2; }
 export AI_EVAL_BASE_URL="${BASE%/}" AI_EVAL_FRESH="$FRESH" AI_EVAL_QUESTIONS="$QUESTIONS"
 exec python3 -I - <<'PY'
 import json, os, re, secrets, statistics, sys, time, urllib.error, urllib.request
+
+# --fresh appends " (ref xxxxxx)" to each question and the model sometimes echoes it ("(ref 1a2b3c)", "(Ref: 1a2b3c)")
+NONCE = re.compile(r"\s*\(\s*ref\s*:?\s*[0-9a-f]{6}\s*\)", re.IGNORECASE)
+def clean(answer): return NONCE.sub("", answer).strip()
 
 BASE = os.environ["AI_EVAL_BASE_URL"]
 FRESH = os.environ["AI_EVAL_FRESH"] == "1"
@@ -149,12 +154,12 @@ for q in spec:
     if code != 200 or not body or not body.get("answer"):
         res, note, tin, tout, tools = "FAIL", "HTTP %s, no answer" % code, 0, 0, 0
     else:
-        problems = check(body["answer"], q["expect"])
+        answer = clean(body["answer"])
+        problems = check(answer, q["expect"])
         res = "FAIL" if problems else "PASS"
-        note = "; ".join(problems) if problems else ("cached" if body.get("cached") else "")
+        flags = "; ".join(problems) if problems else ("cached" if body.get("cached") else "")
         tin, tout, tools = body.get("inputTokens", 0), body.get("outputTokens", 0), body.get("toolCalls", 0)
-        if problems:
-            note += "  -> " + body["answer"].replace("\n", " ")[:160]
+        note = (flags + "  " if flags else "") + "=> " + answer.replace("\n", " ")[:200]
     passed += res == "PASS"
     rows.append((ms, tin, tout, tools, res))
     print("%-18s %-5s %7d %6d %6d %5d  %s" % (q["id"], res, ms, tin, tout, tools, note))

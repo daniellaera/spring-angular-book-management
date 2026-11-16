@@ -79,6 +79,7 @@ Containers receive secrets as environment variables at `up` time (no `.env` on d
 - Rollback: automatic on a failed health check (previous tags in `/var/lib/book-management/*.tag`). Manual: run redeploy.sh with an older tag. Older images stay on CT 110 under the Gitea names (e.g. `192.168.1.103:3000/daniellaera/book-backend:local-features1`).
 - MCP server: `POST /mcp` with `Authorization: Bearer <MCP_API_TOKEN>` (nginx in the frontend container proxies it to the backend). Connect Claude Code/Desktop and test: `docs/AI.md`.
 - AI eval (15 questions, prints pass/fail, tokens, latency): `deploy/ai-eval.sh https://bookmanagement.daniellaera.com [--fresh]`.
+- After the `fix/title-search` deploy the embedded text changed (lowercased): run the Qdrant reindex once (below) so documents match the lowercased queries; see `docs/AI.md`.
 - Reindex Qdrant: `POST /api/v3/ai/books/index` with header `X-Index-Token` (value from Infisical `INDEX_API_TOKEN`).
 
 ## Cutover procedure (used; repeat for any re-do)
