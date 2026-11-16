@@ -20,6 +20,16 @@ spring:
             redirect-uri: ${GITHUB_REDIRECT_URI}
 
   ai:
+    mcp:
+      server:
+        name: book-library
+        version: 1.0.0
+        type: SYNC
+        protocol: STATELESS            # streamable HTTP without sessions: read-only tools need none
+        instructions: Read-only catalogue of a private book library: search, details, counts, by author, by genre.
+        streamable-http:
+          mcp-endpoint: /mcp
+        request-timeout: 20s
     anthropic:
       api-key: ${ANTHROPIC_API_KEY}
       chat:
@@ -63,6 +73,10 @@ ai:
   anonymous-daily-limit: 5   # per client IP, for the public /ask/stream endpoint
   search-limit: 15
   max-tool-calls: 3          # max tool calls per chat question
+
+mcp:
+  api-token: ${MCP_API_TOKEN:}   # Authorization: Bearer for /mcp (MCP server); the endpoint answers 401 to everyone when empty
+  rate-limit-per-minute: 60
 
 index:
   api-token: ${INDEX_API_TOKEN:}   # X-Index-Token for the n8n nightly /index call; disabled when empty

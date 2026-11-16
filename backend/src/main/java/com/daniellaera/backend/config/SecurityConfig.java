@@ -42,7 +42,9 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
-                                                   @Value("${index.api-token:}") String indexApiToken) throws Exception {
+                                                   @Value("${index.api-token:}") String indexApiToken,
+                                                   @Value("${mcp.api-token:}") String mcpApiToken,
+                                                   @Value("${mcp.rate-limit-per-minute:60}") int mcpRateLimitPerMinute) throws Exception {
         http
                 .cors(withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
@@ -91,6 +93,9 @@ public class SecurityConfig {
                     // Feature flags: the login page reads this before it has a token
                     auth.requestMatchers(HttpMethod.GET, "/api/v3/features").permitAll();
 
+                    // MCP server: static bearer token (MCP_API_TOKEN), see McpTokenFilter
+                    auth.requestMatchers("/mcp", "/mcp/**").hasAuthority(McpTokenFilter.AUTHORITY);
+
                     // GitHub OAuth (if enabled)
                     if (oauth2Properties.isEnabled()) {
                         auth.requestMatchers("/api/v3/github/**").permitAll();
@@ -100,10 +105,11 @@ public class SecurityConfig {
                 })
                 // API clients get 401, not a redirect to the OAuth/form login page
                 .exceptionHandling(e -> e.defaultAuthenticationEntryPointFor(
-                        new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), request -> request.getRequestURI().startsWith("/api/")))
+                        new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), request -> request.getRequestURI().startsWith("/api/") || McpTokenFilter.isMcpPath(request.getRequestURI())))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(jwtAuthFilter(), UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(new IndexTokenFilter(indexApiToken), JwtAuthFilter.class);
+                .addFilterBefore(new IndexTokenFilter(indexApiToken), JwtAuthFilter.class)
+                .addFilterBefore(new McpTokenFilter(mcpApiToken, mcpRateLimitPerMinute), JwtAuthFilter.class);
 
         if (oauth2Properties.isEnabled()) {
             System.out.println("Oauth2 enabled");

@@ -28,6 +28,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     @Autowired
     private UserDetailsServiceImpl userDetailsServiceImpl;
 
+    /** /mcp has its own static-token filter; its bearer is not a JWT. */
+    @Override
+    protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
+        return McpTokenFilter.isMcpPath(request.getRequestURI());
+    }
+
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
                                     @NonNull HttpServletResponse response, @NonNull FilterChain filterChain)
@@ -50,7 +56,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return;
         }
         jwt = authHeader.substring(7);
-        userEmail = jwtService.extractUsername(jwt);
+        try {
+            userEmail = jwtService.extractUsername(jwt);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException e) {
+            // not a valid JWT (garbage, or another service's token): treat as unauthenticated -> 401, not 500
+            filterChain.doFilter(request, response);
+            return;
+        }
         if (StringUtils.isNotEmpty(userEmail)
                 && SecurityContextHolder.getContext().getAuthentication() == null) {
             UserDetails userDetails = userDetailsServiceImpl.loadUserByUsername(userEmail);
