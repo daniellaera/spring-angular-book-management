@@ -88,6 +88,9 @@ public class SecurityConfig {
                     // Other AI endpoints
                     auth.requestMatchers("/api/v3/ai/**").permitAll();
 
+                    // Feature flags: the login page reads this before it has a token
+                    auth.requestMatchers(HttpMethod.GET, "/api/v3/features").permitAll();
+
                     // GitHub OAuth (if enabled)
                     if (oauth2Properties.isEnabled()) {
                         auth.requestMatchers("/api/v3/github/**").permitAll();
