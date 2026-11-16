@@ -1,13 +1,10 @@
 import { Component, OnInit, signal, ChangeDetectionStrategy } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 
 // PrimeNG
-import { CardModule } from 'primeng/card';
 import { InputTextModule } from 'primeng/inputtext';
 import { ButtonModule } from 'primeng/button';
-import { MessageModule } from 'primeng/message';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
 
@@ -17,19 +14,15 @@ import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-profile-settings',
-  standalone: true,
-  imports: [
-    CommonModule,
+    imports: [
     FormsModule,
-    CardModule,
     InputTextModule,
     ButtonModule,
-    MessageModule,
     ToastModule
   ],
   providers: [MessageService],
   templateUrl: './profile-settings.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './profile-settings.scss'
 })
 export class ProfileSettings implements OnInit {

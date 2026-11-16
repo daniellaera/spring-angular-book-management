@@ -1,10 +1,8 @@
 import { Component, OnInit, signal, ChangeDetectionStrategy } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 
 // PrimeNG
-import { CardModule } from 'primeng/card';
 import { InputTextModule } from 'primeng/inputtext';
 import { ButtonModule } from 'primeng/button';
 import { DatePickerModule } from 'primeng/datepicker';
@@ -27,11 +25,8 @@ interface BookForm {
 
 @Component({
   selector: 'app-create-book',
-  standalone: true,
-  imports: [
-    CommonModule,
+    imports: [
     FormsModule,
-    CardModule,
     InputTextModule,
     ButtonModule,
     DatePickerModule,
@@ -40,10 +35,12 @@ interface BookForm {
   ],
   providers: [MessageService],
   templateUrl: './create-book.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './create-book.scss'
 })
 export class CreateBook implements OnInit {
+  protected readonly genreSuggestions = ['Technology', 'Programming', 'Fiction', 'Science Fiction', 'Cooking', 'Science', 'Business', 'Lifestyle', 'History', 'Poetry'];
+
   book = signal<BookForm>({
     title: '',
     author: '',
@@ -96,9 +93,8 @@ export class CreateBook implements OnInit {
     };
 
     this.bookService.createBook(createBookDTO).subscribe({
-      next: (createdBook) => {
+      next: () => {
         this.loading.set(false);
-        console.log('Book created:', createdBook);
         this.messageService.add({
           severity: 'success',
           summary: 'Success',

@@ -1,14 +1,6 @@
-.callback-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  gap: 2rem;
-
-  h2 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--text-color);
-  }
-}
+:host { display: block; }
+.callback { min-height: 60vh; display: grid; place-content: center; justify-items: center; gap: 1rem; text-align: center; }
+h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 500; }
+.spinner { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--p-app-border-strong); border-top-color: var(--p-primary-color); animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; border-top-color: var(--p-app-border-strong); border-right-color: var(--p-primary-color); } }

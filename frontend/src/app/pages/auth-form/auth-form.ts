@@ -1,37 +1,29 @@
 import { Component, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, ActivatedRoute } from '@angular/router';
+import { Router, ActivatedRoute, RouterLink } from '@angular/router';
 
-import { CardModule } from 'primeng/card';
 import { InputTextModule } from 'primeng/inputtext';
 import { PasswordModule } from 'primeng/password';
 import { ButtonModule } from 'primeng/button';
-import { MessageModule } from 'primeng/message';
-import { DividerModule } from 'primeng/divider';
 
 import { AuthService } from '../../services/auth.service';
 import {GithubService} from '../../services/github.service';
 
 @Component({
   selector: 'app-auth-form',
-  standalone: true,
-  imports: [
-    CommonModule,
+    imports: [
     FormsModule,
-    CardModule,
+    RouterLink,
     InputTextModule,
     PasswordModule,
-    ButtonModule,
-    MessageModule,
-    DividerModule
+    ButtonModule
   ],
   templateUrl: './auth-form.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './auth-form.scss'
 })
 export class AuthForm implements OnInit {
-  isLoginMode = true; // true = login, false = signup
+  isLoginMode = signal(true); // true = login, false = signup
 
   email = signal('');
   password = signal('');
@@ -51,7 +43,7 @@ export class AuthForm implements OnInit {
 
   ngOnInit(): void {
     // Determine mode from route
-    this.isLoginMode = this.route.snapshot.url[0]?.path === 'login';
+    this.isLoginMode.set(this.route.snapshot.url[0]?.path === 'login');
 
     // Check if GitHub OAuth is enabled
     this.githubService.isGithubEnabled().subscribe({
@@ -79,7 +71,7 @@ export class AuthForm implements OnInit {
     const passwordValue = this.password();
     if (!passwordValue) {
       this.passwordError.set('Password is required');
-    } else if (!this.isLoginMode && passwordValue.length < 6) {
+    } else if (!this.isLoginMode() && passwordValue.length < 6) {
       this.passwordError.set('Password must be at least 6 characters');
     } else {
       this.passwordError.set('');
@@ -104,7 +96,7 @@ export class AuthForm implements OnInit {
     this.loading.set(true);
     this.errorMessage.set(null);
 
-    if (this.isLoginMode) {
+    if (this.isLoginMode()) {
       this.handleLogin();
     } else {
       this.handleSignup();
@@ -152,13 +144,5 @@ export class AuthForm implements OnInit {
         this.errorMessage.set('GitHub login unavailable');
       }
     });
-  }
-
-  switchMode(): void {
-    if (this.isLoginMode) {
-      this.router.navigate(['/signup']);
-    } else {
-      this.router.navigate(['/login']);
-    }
   }
 }

@@ -1,99 +1,59 @@
-<div class="auth-container">
-  <p-card class="auth-card">
-    <ng-template pTemplate="header">
-      <div class="card-header">
-        <i [class]="isLoginMode ? 'pi pi-sign-in text-6xl' : 'pi pi-user-plus text-6xl'"></i>
-        <h2 class="text-3xl font-bold mt-3">
-          {{ isLoginMode ? 'Welcome Back' : 'Create Account' }}
-        </h2>
-        <p class="text-color-secondary">
-          {{ isLoginMode ? 'Sign in to your account' : 'Sign up to get started' }}
-        </p>
-      </div>
-    </ng-template>
+<div class="container form-page auth">
 
-    <form (ngSubmit)="handleSubmit()" class="auth-form">
-      <!-- Email -->
+  <aside class="auth__intro" aria-hidden="true">
+    <p class="eyebrow">Your personal library</p>
+    <p class="auth__big">Every book,<br /><em>one question</em> away.</p>
+    <ul>
+      <li><i class="pi pi-sparkles"></i> Ask for books in plain language</li>
+      <li><i class="pi pi-calendar"></i> Borrow, return and track due dates</li>
+      <li><i class="pi pi-star"></i> Rate and comment on what you read</li>
+    </ul>
+  </aside>
+
+  <div class="panel form-card auth__card rise">
+    <div class="form-card__head">
+      <h1>{{ isLoginMode() ? 'Welcome back' : 'Create your account' }}</h1>
+      <p>{{ isLoginMode() ? 'Sign in to borrow, rate and talk to the assistant.' : 'It takes a minute. No credit card, no spam.' }}</p>
+    </div>
+
+    <form class="form-grid" (ngSubmit)="handleSubmit()" novalidate>
       <div class="form-field">
-        <label for="email" class="block font-semibold mb-2">Email</label>
-        <input
-          pInputText
-          id="email"
-          type="email"
-          [(ngModel)]="email"
-          (ngModelChange)="validateEmail()"
-          name="email"
-          placeholder="Enter your email"
-          class="w-full"
-          [class.p-invalid]="emailError()"
-          required />
-        @if (emailError()) {
-          <p-message severity="error" styleClass="mt-2">{{ emailError() }}</p-message>
-        }
+        <label for="email">Email</label>
+        <input pInputText id="email" type="email" name="email" autocomplete="email" inputmode="email"
+               [(ngModel)]="email" (ngModelChange)="validateEmail()"
+               placeholder="you@example.com" [invalid]="!!emailError()"
+               [attr.aria-invalid]="emailError() ? 'true' : null" [attr.aria-describedby]="emailError() ? 'email-error' : null" required />
+        @if (emailError()) { <p id="email-error" class="field-error" role="alert"><i class="pi pi-exclamation-circle" aria-hidden="true"></i>{{ emailError() }}</p> }
       </div>
 
-      <!-- Password -->
       <div class="form-field">
-        <label for="password" class="block font-semibold mb-2">Password</label>
-        <p-password
-          [(ngModel)]="password"
-          (ngModelChange)="validatePassword()"
-          name="password"
-          [placeholder]="isLoginMode ? 'Enter your password' : 'Create a password (min 6 characters)'"
-          [toggleMask]="true"
-          [feedback]="!isLoginMode"
-          styleClass="w-full"
-          [inputStyle]="{ width: '100%' }"
-          [class.p-invalid]="passwordError()">
-        </p-password>
-        @if (passwordError()) {
-          <p-message severity="error" styleClass="mt-2">{{ passwordError() }}</p-message>
-        }
+        <label for="password">Password</label>
+        <p-password inputId="password" name="password" [(ngModel)]="password" (ngModelChange)="validatePassword()"
+                    [placeholder]="isLoginMode() ? 'Your password' : 'At least 6 characters'"
+                    [toggleMask]="true" [feedback]="!isLoginMode()" [invalid]="!!passwordError()"
+                    [attr.autocomplete]="isLoginMode() ? 'current-password' : 'new-password'"
+                    styleClass="w-full" [inputStyle]="{ width: '100%' }" />
+        @if (passwordError()) { <p id="password-error" class="field-error" role="alert"><i class="pi pi-exclamation-circle" aria-hidden="true"></i>{{ passwordError() }}</p> }
       </div>
 
-      <!-- Error Message -->
       @if (errorMessage()) {
-        <p-message severity="error" styleClass="w-full">
-          {{ errorMessage() }}
-        </p-message>
+        <p class="alert" role="alert"><i class="pi pi-times-circle" aria-hidden="true"></i>{{ errorMessage() }}</p>
       }
 
-      <!-- Submit Button -->
-      <p-button
-        type="submit"
-        [label]="isLoginMode ? 'Sign In' : 'Create Account'"
-        [icon]="isLoginMode ? 'pi pi-sign-in' : 'pi pi-user-plus'"
-        [loading]="loading()"
-        [disabled]="!isFormValid() || loading()"
-        styleClass="w-full">
-      </p-button>
+      <p-button type="submit" [label]="isLoginMode() ? 'Sign in' : 'Create account'"
+                [icon]="isLoginMode() ? 'pi pi-sign-in' : 'pi pi-user-plus'" size="large"
+                [loading]="loading()" [disabled]="!isFormValid() || loading()" styleClass="w-full" />
 
-      @if (isLoginMode && oauth2Enabled()) {
-        <p-divider align="center">
-          <span class="text-color-secondary">OR</span>
-        </p-divider>
-
-        <!-- GitHub Login -->
-        <p-button
-          type="button"
-          label="Continue with GitHub"
-          icon="pi pi-github"
-          severity="secondary"
-          [outlined]="true"
-          (onClick)="loginWithGitHub()"
-          styleClass="w-full">
-        </p-button>
+      @if (isLoginMode() && oauth2Enabled()) {
+        <div class="or" role="separator" aria-label="or"><span>or</span></div>
+        <p-button type="button" label="Continue with GitHub" icon="pi pi-github" severity="secondary" [outlined]="true"
+                  size="large" (onClick)="loginWithGitHub()" styleClass="w-full" />
       }
-
-      <!-- Switch Mode Link -->
-      <div class="text-center mt-4">
-        <p class="text-color-secondary">
-          {{ isLoginMode ? "Don't have an account?" : "Already have an account?" }}
-          <a (click)="switchMode()" class="text-primary font-semibold cursor-pointer">
-            {{ isLoginMode ? 'Sign Up' : 'Sign In' }}
-          </a>
-        </p>
-      </div>
     </form>
-  </p-card>
+
+    <p class="auth__switch muted">
+      {{ isLoginMode() ? "New here?" : 'Already have an account?' }}
+      <a [routerLink]="isLoginMode() ? '/signup' : '/login'">{{ isLoginMode() ? 'Create an account' : 'Sign in' }}</a>
+    </p>
+  </div>
 </div>

@@ -1,123 +1,55 @@
-<div class="create-book-container">
-  <p-toast></p-toast>
+<div class="container form-page narrow">
+  <p-toast />
+  <div class="panel form-card rise">
+    <div class="form-card__head">
+      <p class="eyebrow">New entry</p>
+      <h1>Add a book</h1>
+      <p>It becomes searchable by meaning as soon as it is saved.</p>
+    </div>
 
-  <p-card class="create-book-card">
-    <ng-template pTemplate="header">
-      <div class="card-header">
-        <i class="pi pi-book text-6xl"></i>
-        <h2 class="text-3xl font-bold mt-3">Create a New Book</h2>
-        <p class="text-color-secondary">Add a new book to the library</p>
-      </div>
-    </ng-template>
-
-    <form (ngSubmit)="submitForm()" class="book-form">
-      <!-- Title -->
+    <form class="form-grid" (ngSubmit)="submitForm()">
       <div class="form-field">
-        <label for="title" class="block font-semibold mb-2">Title</label>
-        <input
-          pInputText
-          id="title"
-          type="text"
-          [(ngModel)]="book().title"
-          name="title"
-          placeholder="Enter the book title"
-          class="w-full"
-          required />
+        <label for="title">Title <span class="req" aria-hidden="true">*</span></label>
+        <input pInputText id="title" type="text" name="title" [(ngModel)]="book().title" placeholder="e.g. Clean Architecture" required />
       </div>
 
-      <!-- Author -->
+      <div class="form-grid form-grid--2">
+        <div class="form-field">
+          <label for="author">Author <span class="req" aria-hidden="true">*</span></label>
+          <input pInputText id="author" type="text" name="author" [(ngModel)]="book().author" placeholder="e.g. Robert C. Martin" required />
+        </div>
+        <div class="form-field">
+          <label for="genre">Genre</label>
+          <input pInputText id="genre" type="text" name="genre" [(ngModel)]="book().genre" list="genre-options" placeholder="Pick or type a genre" autocomplete="off" />
+          <datalist id="genre-options">
+            @for (g of genreSuggestions; track g) { <option [value]="g"></option> }
+          </datalist>
+        </div>
+      </div>
+
+      <div class="form-grid form-grid--2">
+        <div class="form-field">
+          <label for="isbn">ISBN <span class="req" aria-hidden="true">*</span></label>
+          <input pInputText id="isbn" type="text" name="isbn" [(ngModel)]="book().isbn" placeholder="978-…" inputmode="numeric" required />
+        </div>
+        <div class="form-field">
+          <label for="publishedDate">Published <span class="req" aria-hidden="true">*</span></label>
+          <p-datepicker inputId="publishedDate" name="publishedDate" [(ngModel)]="book().publishedDate" [showIcon]="true"
+                        dateFormat="dd/mm/yy" placeholder="dd/mm/yyyy" styleClass="w-full" [inputStyle]="{ width: '100%' }" appendTo="body" required />
+        </div>
+      </div>
+
       <div class="form-field">
-        <label for="author" class="block font-semibold mb-2">Author</label>
-        <input
-          pInputText
-          id="author"
-          type="text"
-          [(ngModel)]="book().author"
-          name="author"
-          placeholder="Enter the author's name"
-          class="w-full"
-          required />
+        <label for="description">Description <span class="req" aria-hidden="true">*</span></label>
+        <textarea pTextarea id="description" name="description" [(ngModel)]="book().description" rows="5"
+                  placeholder="A sentence or two about what the book is about. This text is what semantic search understands." required></textarea>
+        <span class="hint">Good descriptions make "Ask your library" results better.</span>
       </div>
 
-      <!-- ISBN -->
-      <div class="form-field">
-        <label for="isbn" class="block font-semibold mb-2">ISBN</label>
-        <input
-          pInputText
-          id="isbn"
-          type="text"
-          [(ngModel)]="book().isbn"
-          name="isbn"
-          placeholder="Enter the ISBN"
-          class="w-full"
-          required />
-      </div>
-
-      <!-- Genre -->
-      <div class="form-field">
-        <label for="genre" class="block font-semibold mb-2">Genre</label>
-        <input
-          pInputText
-          id="genre"
-          type="text"
-          [(ngModel)]="book().genre"
-          name="genre"
-          placeholder="Enter the book genre"
-          class="w-full"
-          required />
-      </div>
-
-      <!-- Published Date -->
-      <div class="form-field">
-        <label for="publishedDate" class="block font-semibold mb-2">Published Date</label>
-        <p-datepicker
-          [(ngModel)]="book().publishedDate"
-          name="publishedDate"
-          [showIcon]="true"
-          dateFormat="dd/mm/yy"
-          placeholder="Select the published date"
-          styleClass="w-full"
-          [inputStyle]="{ width: '100%' }"
-          required>
-        </p-datepicker>
-      </div>
-
-      <!-- Description -->
-      <div class="form-field">
-        <label for="description" class="block font-semibold mb-2">Description</label>
-        <textarea
-          pInputTextarea
-          id="description"
-          [(ngModel)]="book().description"
-          name="description"
-          placeholder="Enter the book description"
-          rows="5"
-          class="w-full"
-          required>
-        </textarea>
-      </div>
-
-      <!-- Action Buttons -->
-      <div class="flex gap-3 mt-4">
-        <p-button
-          type="submit"
-          label="Create Book"
-          icon="pi pi-check"
-          [loading]="loading()"
-          [disabled]="!isFormValid() || loading()"
-          styleClass="flex-1">
-        </p-button>
-
-        <p-button
-          type="button"
-          label="Cancel"
-          icon="pi pi-times"
-          severity="secondary"
-          [outlined]="true"
-          (onClick)="cancel()"
-          styleClass="flex-1">
-        </p-button>
+      <div class="form-actions">
+        <p-button type="submit" label="Create book" icon="pi pi-check" size="large" [loading]="loading()" [disabled]="!isFormValid() || loading()" />
+        <p-button type="button" label="Cancel" severity="secondary" [outlined]="true" size="large" (onClick)="cancel()" />
       </div>
     </form>
-  </p-card>
+  </div>
 </div>
