@@ -1,6 +1,7 @@
 package com.daniellaera.backend.controller;
 
-import com.daniellaera.backend.dao.BookAiView;
+import com.daniellaera.backend.ai.BookTools;
+import com.daniellaera.backend.ai.BookToolsService;
 import com.daniellaera.backend.dao.BookDTO;
 import com.daniellaera.backend.properties.AiProperties;
 import com.daniellaera.backend.service.*;
@@ -21,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v3/ai/books")
@@ -35,6 +35,7 @@ public class BookAiController {
     private final QdrantSearchService qdrantSearch;
     private final BookVectorIndexService indexService;
     private final AiUsageLogger usageLogger;
+    private final BookToolsService toolsService;
 
     public BookAiController(ChatClient.Builder chatClientBuilder,
                             BookService bookService,
@@ -43,7 +44,8 @@ public class BookAiController {
                             AiCacheService cache,
                             QdrantSearchService qdrantSearch,
                             BookVectorIndexService indexService,
-                            AiUsageLogger usageLogger) {
+                            AiUsageLogger usageLogger,
+                            BookToolsService toolsService) {
         this.bookService = bookService;
         this.aiProperties = aiProperties;
         this.rateLimiter = rateLimiter;
@@ -51,6 +53,7 @@ public class BookAiController {
         this.qdrantSearch = qdrantSearch;
         this.indexService = indexService;
         this.usageLogger = usageLogger;
+        this.toolsService = toolsService;
         this.chatClient = chatClientBuilder.build();
     }
 
@@ -90,8 +93,9 @@ public class BookAiController {
         AtomicReference<String> model = new AtomicReference<>();
 
         return chatClient.prompt()
-                .system(buildSmartPrompt(question))
+                .system(SYSTEM_PROMPT)
                 .user(question)
+                .tools(newTools(caller))
                 .stream()
                 .chatResponse()
                 .doOnNext(r -> captureMetadata(r, lastUsage, model))
@@ -121,8 +125,9 @@ public class BookAiController {
         recordRequest(caller);
 
         var response = chatClient.prompt()
-                .system(buildSmartPrompt(question))
+                .system(SYSTEM_PROMPT)
                 .user(question)
+                .tools(newTools(caller))
                 .call()
                 .chatResponse();
 
@@ -216,43 +221,20 @@ public class BookAiController {
         if (m != null && !m.isBlank()) model.set(m);
     }
 
-    /**
-     * The Heart of the RAG system: Assembles the prompt dynamically.
-     */
-    private String buildSmartPrompt(String question) {
-        // 1. DYNAMIC COUNT: Tells Claude how big the library is
-        long totalLibrarySize = bookService.getTotalBookCount();
-
-        // 2. VECTOR SEARCH: Gets relevant IDs
-        List<Integer> relevantIds = qdrantSearch.searchSimilarBooks(question, aiProperties.getSearchLimit());
-
-        // 3. SLIM DATA FETCH: Converts IDs to Record Views
-        List<BookAiView> books = bookService.getBooksAiOptimizedView(relevantIds);
-
-        // 4. CONTEXT BUILDING: Uses Record Accessors (id(), title(), etc.)
-        String bookContext = books.stream()
-                .map(b -> String.format("%d|%s|%s|%s|%s",
-                        b.id(), b.title(), b.author(),
-                        b.averageRating() != null ? b.averageRating() : "-",
-                        b.available() ? "Y" : "N"))
-                .collect(Collectors.joining("\n"));
-
-        // 5. THE FINAL SYSTEM PROMPT
-        return """
-            You are a library assistant for a private collection.
-            
-            Current Library Metadata:
-            - Total books in database: %d
-            - The following %d books are the most relevant matches found for the user's query.
-            
-            Books (format: id|title|author|rating|available Y/N):
-            %s
-            
-            Instructions:
-            1. If the user's question can be answered by the metadata above, do so concisely.
-            2. If the user asks about the "entire catalog", mention there are %d books total.
-            3. If a book is marked as 'Available: No', mention it is currently borrowed.
-            4. Keep responses short and professional.
-            """.formatted(totalLibrarySize, books.size(), bookContext, totalLibrarySize);
+    /** A fresh tool instance per question: it carries the per-question call budget (max tool-call iterations). */
+    private BookTools newTools(Caller caller) {
+        return new BookTools(toolsService, aiProperties.getMaxToolCalls(), caller.anonymous() ? "chat-anon" : "chat");
     }
+
+    private static final String SYSTEM_PROMPT = """
+            You are the assistant of a private book library. Answer only questions about this library.
+            Use the tools to look things up: never guess counts, authors, ratings or availability.
+            - "how many" questions: call count_books (or list_by_author / list_by_genre, which return exact totals).
+            - Books by an author or in a genre: list_by_author / list_by_genre. Topics, themes, similar books: search_books.
+            - What can be borrowed now: search_books with availableOnly=true, or count_books for the number.
+            - Details of one book: get_book. Prefer one tool call; never more than three.
+            Tool rows look like id|title|author|rating|available (Y = available, N = borrowed).
+            Reply in at most three short sentences of plain text, no markdown tables. Mention when a book is borrowed.
+            If nothing matches, say you found no matching books.
+            """;
 }

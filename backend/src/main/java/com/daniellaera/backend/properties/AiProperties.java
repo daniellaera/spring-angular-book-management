@@ -11,6 +11,8 @@ public class AiProperties {
     private int dailyLimit = 20;
     private int anonymousDailyLimit = 5;
     private int searchLimit;
+    /** Max tool calls the model may make per chat question (guards cost and loops). */
+    private int maxToolCalls = 3;
 
     public boolean isEnabled() {
         return enabled;
@@ -42,5 +44,13 @@ public class AiProperties {
 
     public void setAnonymousDailyLimit(int anonymousDailyLimit) {
         this.anonymousDailyLimit = anonymousDailyLimit;
+    }
+
+    public int getMaxToolCalls() {
+        return maxToolCalls;
+    }
+
+    public void setMaxToolCalls(int maxToolCalls) {
+        this.maxToolCalls = maxToolCalls;
     }
 }

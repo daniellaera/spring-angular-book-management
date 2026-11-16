@@ -25,7 +25,7 @@ spring:
       chat:
         options:
           model: ${ANTHROPIC_MODEL:claude-haiku-5-5}
-          max-tokens: 2048
+          max-tokens: 1024
           # No temperature/top-p/top-k on purpose: Claude 5.x rejects non-default sampling params (HTTP 400).
           # Spring AI 2.0.0-M2 sends none by default. Lowest "effort"/thinking is not exposed by this version
           # (it is only in the SDK-based 2.0.2+/2.1.x rewrite, which has different properties) - revisit on upgrade.
@@ -62,6 +62,7 @@ ai:
   daily-limit: 20
   anonymous-daily-limit: 5   # per client IP, for the public /ask/stream endpoint
   search-limit: 15
+  max-tool-calls: 3          # max tool calls per chat question
 
 index:
   api-token: ${INDEX_API_TOKEN:}   # X-Index-Token for the n8n nightly /index call; disabled when empty

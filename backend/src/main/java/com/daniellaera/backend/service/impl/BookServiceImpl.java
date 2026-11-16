@@ -12,6 +12,7 @@ import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
@@ -97,6 +98,26 @@ public class BookServiceImpl implements BookService {
             return List.of();
         }
         return bookRepository.findAllAiViewsByIds(ids);
+    }
+
+    @Override
+    public Page<BookAiView> findAiViewsByAuthor(String author, int limit) {
+        return bookRepository.findAiViewsByAuthor(author, PageRequest.of(0, limit));
+    }
+
+    @Override
+    public Page<BookAiView> findAiViewsByGenre(String genre, int limit) {
+        return bookRepository.findAiViewsByGenre(genre, PageRequest.of(0, limit));
+    }
+
+    @Override
+    public Page<BookAiView> findAvailableAiViews(int limit) {
+        return bookRepository.findAvailableAiViews(PageRequest.of(0, limit));
+    }
+
+    @Override
+    public long countAvailableBooks() {
+        return bookRepository.countByIsAvailable(true);
     }
 
     @Override

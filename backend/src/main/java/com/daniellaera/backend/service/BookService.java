@@ -25,4 +25,13 @@ public interface BookService {
     long getTotalBookCount();
 
     List<BookAiView> getBooksAiOptimizedView(List<Integer> relevantIds);
+
+    /** Compact views for the AI tools (author/genre match is case-insensitive "contains"). */
+    Page<BookAiView> findAiViewsByAuthor(String author, int limit);
+
+    Page<BookAiView> findAiViewsByGenre(String genre, int limit);
+
+    Page<BookAiView> findAvailableAiViews(int limit);
+
+    long countAvailableBooks();
 }

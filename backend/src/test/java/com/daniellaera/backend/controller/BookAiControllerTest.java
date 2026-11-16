@@ -55,6 +55,9 @@ public class BookAiControllerTest {
     private AiUsageLogger usageLogger;
 
     @Mock
+    private com.daniellaera.backend.ai.BookToolsService toolsService;
+
+    @Mock
     private ChatClient chatClient;
 
     @Mock
@@ -65,7 +68,7 @@ public class BookAiControllerTest {
         given(chatClientBuilder.build()).willReturn(chatClient);
         BookAiController bookAiController = new BookAiController(
                 chatClientBuilder, bookService, aiProperties,
-                rateLimiter, cache, qdrantSearch, indexService, usageLogger
+                rateLimiter, cache, qdrantSearch, indexService, usageLogger, toolsService
         );
         mockMvc = MockMvcBuilders.standaloneSetup(bookAiController)
                 .addFilter((request, response, chain) -> {
