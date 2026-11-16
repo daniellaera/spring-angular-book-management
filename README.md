@@ -17,21 +17,50 @@ A full-stack book management application with an **AI-powered chat assistant**. 
 
 ## Architecture Overview
 
+```mermaid
+flowchart LR
+    subgraph Clients
+        B["Browser<br/>(Angular 21)"]
+        M["MCP clients<br/>(Claude Code / Desktop)"]
+    end
+    P["Reverse proxy<br/>(TLS)"]
+    subgraph App["Spring Boot backend"]
+        API["REST API + AI chat"]
+        MCP["MCP endpoint<br/>6 book-library tools"]
+        IDX["Indexing<br/>(BookVectorIndexService)"]
+    end
+    subgraph Data["Data and AI services"]
+        PG[("PostgreSQL")]
+        Q[("Qdrant<br/>vectors")]
+        O["Ollama<br/>embeddings"]
+        C["Claude API"]
+    end
+    B --> P
+    M --> P
+    P --> API
+    P --> MCP
+    API --> PG
+    API --> Q
+    API --> C
+    API -. "query embedding" .-> O
+    MCP --> PG
+    IDX --> PG
+    IDX --> O
+    IDX --> Q
 ```
-┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│   Angular 21     │────▶│  Spring Boot 4   │────▶│   PostgreSQL     │
-│   (Frontend)     │     │  (Backend API)   │     │   (Database)     │
-└──────────────────┘     └────────┬─────────┘     └──────────────────┘
-                                  │
-                    ┌─────────────┼─────────────┐
-                    ▼             ▼              ▼
-             ┌───────────┐ ┌───────────┐ ┌───────────────┐
-             │  Claude   │ │  Qdrant   │ │    Ollama     │
-             │  (Haiku)  │ │ (Vectors) │ │ (Embeddings)  │
-             └───────────┘ └───────────┘ └───────────────┘
 
-Indexing runs inside the Spring app: nightly full run + on-change (create/delete) + manual endpoint.
+*System overview: the browser and MCP clients reach one Spring Boot backend through the reverse proxy; the backend keeps Qdrant in sync with PostgreSQL itself.*
+
+```mermaid
+flowchart LR
+    DEV["git push to main"] --> CI["Gitea Actions<br/>build + test"]
+    CI --> REG["Gitea container<br/>registry"]
+    REG --> DEP["Deploy script<br/>health check +<br/>auto-rollback"]
+    INF["Infisical<br/>secrets"] -. "injected at start" .-> DEP
+    DEP --> RUN["Running stack"]
 ```
+
+*CI/CD: a push to main is tested, built, pushed to the registry and deployed; a failed health check rolls back to the previous image; secrets are pulled at start, never stored in CI.*
 
 ## Key Features
 
@@ -204,6 +233,56 @@ The Spring app keeps the vector database in sync itself (the former n8n "book-in
 Full runs are guarded in-JVM: if one is already running, the next one is skipped and logged. On-change indexing runs after the
 DB commit on a dedicated single-thread executor; if Ollama or Qdrant are down it logs one WARN line and the nightly run catches up.
 Details and log lines to grep: `docs/AI.md`.
+
+```mermaid
+flowchart TB
+    subgraph Triggers
+        S["Nightly @Scheduled<br/>full reindex"]
+        E["Book created / deleted<br/>AFTER_COMMIT event"]
+        X["POST /api/v3/ai/books/index<br/>(JWT or index token)"]
+    end
+    EX["Async single-thread<br/>executor"]
+    E --> EX
+    subgraph SVC["BookVectorIndexService"]
+        G{"Full run<br/>already running?"}
+        H["Content-hash skip<br/>(unchanged books)"]
+        U["Upsert point<br/>id = book id"]
+    end
+    S --> G
+    X --> G
+    G -- "yes: skip + log" --> Z["Done"]
+    G -- "no" --> H
+    EX -- "indexBook(id)" --> U
+    H --> U
+    U --> O["Ollama<br/>embedding"]
+    U --> Q[("Qdrant")]
+```
+
+*Indexing flow: three triggers share one service; the n8n workflow it replaces is removed. Full runs are guarded and hash-skipped, single-book runs upsert by book id, so repeats never duplicate.*
+
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant API as Backend
+    participant DB as PostgreSQL
+    participant L as Index listener (async)
+    participant O as Ollama
+    participant Q as Qdrant
+    U->>API: POST /api/v3/book
+    API->>DB: save book (commit)
+    API-->>U: 201 Created
+    API--)L: BookChangedEvent (after commit)
+    L->>O: embed book text
+    L->>Q: upsert point (id = book id)
+    Note over U,Q: Book is now found by semantic search
+    alt Ollama or Qdrant down
+        L->>L: log WARN (no stack trace)
+        Note over U,L: Request already succeeded - the nightly run catches up
+    end
+```
+
+*Book created to searchable: indexing happens after the response, and a failure is only logged; the nightly full run repairs it.*
+
 
 ### Manual indexing endpoint
 

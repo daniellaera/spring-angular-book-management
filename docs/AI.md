@@ -111,6 +111,55 @@ Three triggers, one code path (`BookVectorIndexService`; point id = book id, wri
 - **manual**: `POST /api/v3/ai/books/index` (JWT, or `X-Index-Token` = `INDEX_API_TOKEN`), unchanged response shape.
   If a full run is already in progress the response is `{"result":"Skipped: indexing already in progress", all counters 0}`.
 
+```mermaid
+flowchart TB
+    subgraph Triggers
+        S["Nightly @Scheduled<br/>full reindex"]
+        E["Book created / deleted<br/>AFTER_COMMIT event"]
+        X["POST /api/v3/ai/books/index<br/>(JWT or index token)"]
+    end
+    EX["Async single-thread<br/>executor"]
+    E --> EX
+    subgraph SVC["BookVectorIndexService"]
+        G{"Full run<br/>already running?"}
+        H["Content-hash skip<br/>(unchanged books)"]
+        U["Upsert point<br/>id = book id"]
+    end
+    S --> G
+    X --> G
+    G -- "yes: skip + log" --> Z["Done"]
+    G -- "no" --> H
+    EX -- "indexBook(id)" --> U
+    H --> U
+    U --> O["Ollama<br/>embedding"]
+    U --> Q[("Qdrant")]
+```
+
+*Indexing flow: three triggers share one service; the n8n workflow it replaces is removed. Full runs are guarded and hash-skipped, single-book runs upsert by book id, so repeats never duplicate.*
+
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant API as Backend
+    participant DB as PostgreSQL
+    participant L as Index listener (async)
+    participant O as Ollama
+    participant Q as Qdrant
+    U->>API: POST /api/v3/book
+    API->>DB: save book (commit)
+    API-->>U: 201 Created
+    API--)L: BookChangedEvent (after commit)
+    L->>O: embed book text
+    L->>Q: upsert point (id = book id)
+    Note over U,Q: Book is now found by semantic search
+    alt Ollama or Qdrant down
+        L->>L: log WARN (no stack trace)
+        Note over U,L: Request already succeeded - the nightly run catches up
+    end
+```
+
+*Book created to searchable: indexing happens after the response, and a failure is only logged; the nightly full run repairs it.*
+
 Properties (env var in brackets), defaults in `application.yml`:
 
 | Property | Default | |
