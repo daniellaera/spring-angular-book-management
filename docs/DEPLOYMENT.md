@@ -45,7 +45,7 @@ CI (Gitea Actions, runner VM 200): test -> build images -> push to Gitea registr
 
 ## Container registry (Gitea)
 - Images: `192.168.1.103:3000/daniellaera/book-backend` and `.../book-frontend`, tagged `<git sha>` and `latest` (`REGISTRY` in the workflow, compose and redeploy.sh).
-- Push (CI): the built-in Actions token (`secrets.GITHUB_TOKEN`, package write). If Gitea rejects it, set the Gitea secrets `GITEA_PUSH_USER` + `GITEA_PUSH_TOKEN` (token scope `write:package` only); the workflow prefers them when present.
+- Push (CI): Gitea repo secrets `REGISTRY_PUSH_USER` + `REGISTRY_PUSH_TOKEN` (personal access token with package read+write). The built-in Actions token is rejected by the registry, and Gitea does not allow secret names starting with `GITEA_`.
 - Pull (CT 110): `redeploy.sh` logs in with `GITEA_REGISTRY_USER` / `GITEA_REGISTRY_TOKEN` from Infisical and logs out on exit.
 - One-time on CT 110: `deploy/setup-registry.sh` (insecure-registries reload + re-tag existing local images).
 - The registry is plain HTTP, so Docker must list it as insecure on every host that pushes or pulls (CT 110 and the runner VM 200):

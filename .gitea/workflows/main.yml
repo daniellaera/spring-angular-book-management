@@ -126,12 +126,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Push credentials: the built-in Actions token (package write). If Gitea rejects it, add the secrets
-      # GITEA_PUSH_USER + GITEA_PUSH_TOKEN (token with only write:package) and this step uses them automatically.
+      # Push credentials: repo secrets REGISTRY_PUSH_USER + REGISTRY_PUSH_TOKEN (Gitea token with package write).
+      # The built-in Actions token is rejected by the registry, and Gitea refuses secret names starting with GITEA_.
       - name: Log in to the Gitea container registry
         env:
-          REG_USER: ${{ secrets.GITEA_PUSH_USER || github.actor }}
-          REG_TOKEN: ${{ secrets.GITEA_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+          REG_USER: ${{ secrets.REGISTRY_PUSH_USER }}
+          REG_TOKEN: ${{ secrets.REGISTRY_PUSH_TOKEN }}
         run: echo "$REG_TOKEN" | docker login "$REGISTRY_HOST" -u "$REG_USER" --password-stdin
 
       - name: Generate Version
