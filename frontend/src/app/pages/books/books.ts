@@ -1,141 +1,206 @@
-import { ChangeDetectorRef, Component, OnInit, ViewChild, ChangeDetectionStrategy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
+import { expand, reduce, EMPTY } from 'rxjs';
 
-// PrimeNG
-import { Table, TableLazyLoadEvent, TableModule } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
-import { InputTextModule } from 'primeng/inputtext';
-import { TagModule } from 'primeng/tag';
-import { IconFieldModule } from 'primeng/iconfield';
-import { InputIconModule } from 'primeng/inputicon';
-import { CardModule } from 'primeng/card';
-import { TooltipModule } from 'primeng/tooltip';
+import { PaginatorModule, PaginatorState } from 'primeng/paginator';
+import { SelectModule } from 'primeng/select';
+import { TableModule } from 'primeng/table';
 
-import { BookService } from '../../services/book.service';
 import { Book } from '../../models/book.model';
+import { BookService } from '../../services/book.service';
+import { AiSearchService } from '../../services/ai-search.service';
+import { ChatUiService } from '../../services/chat-ui.service';
+import { genreDot } from '../../services/book-visuals';
+import { HeroShelf } from '../../components/hero-shelf/hero-shelf';
+import { BookCard } from '../../components/book-card/book-card';
+import { BookCover } from '../../components/book-cover/book-cover';
+
+type SortKey = 'recent' | 'title' | 'author' | 'rating';
+type ViewMode = 'grid' | 'table';
+
+const VIEW_KEY = 'books_view';
+const PAGE_SIZE_FETCH = 100;
 
 @Component({
   selector: 'app-books-component',
-  standalone: true,
-  imports: [
-    CommonModule,
-    FormsModule,
-    TableModule,
-    ButtonModule,
-    InputTextModule,
-    TagModule,
-    IconFieldModule,
-    InputIconModule,
-    CardModule,
-    TooltipModule
-  ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [HeroShelf, FormsModule, RouterLink, DatePipe, ButtonModule, PaginatorModule, SelectModule, TableModule, BookCard, BookCover],
   templateUrl: './books.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './books.scss'
 })
 export class Books implements OnInit {
-  // ✅ Added #dt reference to match ViewChild
-  @ViewChild('dt') table?: Table;
+  private bookService = inject(BookService);
+  private aiSearch = inject(AiSearchService);
+  private chat = inject(ChatUiService);
+  private router = inject(Router);
+  private destroyRef = inject(DestroyRef);
 
-  books: Book[] = [];
-  loading = true;
-  totalRecords = 0;
+  // ---- catalogue (loaded once, filtered/sorted/paged on the client: instant feedback) ----
+  protected catalog = signal<Book[]>([]);
+  protected loading = signal(true);
+  protected loadFailed = signal(false);
 
-  first = 0;
-  rows = 10;
-  searchKeyword = '';
+  protected query = signal('');
+  protected genre = signal<string | null>(null);
+  protected sort = signal<SortKey>('recent');
+  protected view = signal<ViewMode>(this.readView());
+  protected first = signal(0);
+  protected rows = signal(12);
 
-  constructor(
-    private bookService: BookService,
-    private router: Router,
-    private cdr: ChangeDetectorRef
-  ) {}
+  protected readonly sortOptions: { label: string; value: SortKey }[] = [
+    { label: 'Newest first', value: 'recent' },
+    { label: 'Title A–Z', value: 'title' },
+    { label: 'Author A–Z', value: 'author' },
+    { label: 'Top rated', value: 'rating' }
+  ];
 
-  ngOnInit(): void {}
-
-  /**
-   * Primary data loader. Triggered by:
-   * 1. Initial table init
-   * 2. Paging/Sorting/Filtering via UI
-   * 3. Calling this.table.reset()
-   */
-  loadBooks(event: TableLazyLoadEvent): void {
-    this.loading = true;
-
-    // Sync local state with table event
-    this.first = event.first ?? 0;
-    this.rows = event.rows ?? 10;
-
-    const page = Math.floor(this.first / this.rows);
-    const sortField = (event.sortField as string) ?? 'createdDate';
-    const sortOrder = event.sortOrder ?? -1;
-
-    this.bookService
-      .getAllBooks(page, this.rows, sortField, sortOrder, this.searchKeyword)
-      .subscribe({
-        next: (response) => {
-          this.books = response.content;
-          this.totalRecords = response.totalElements;
-          this.loading = false;
-          this.cdr.detectChanges();
-        },
-        error: (error) => {
-          console.error('❌ Error loading books:', error);
-          this.loading = false;
-          this.books = [];
-          this.totalRecords = 0;
-          this.cdr.detectChanges();
-        }
-      });
-  }
-
-  onSearch(): void {
-    if (this.table) {
-      // reset() automatically sets first=0 and triggers onLazyLoad
-      this.table.reset();
-    } else {
-      // Fallback if table isn't ready
-      this.loadBooks({ first: 0, rows: this.rows });
+  protected genres = computed(() => {
+    const counts = new Map<string, number>();
+    for (const b of this.catalog()) {
+      const g = b.genre?.trim();
+      if (g) counts.set(g, (counts.get(g) ?? 0) + 1);
     }
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, count]) => ({ name, count }));
+  });
+
+  protected filtered = computed(() => {
+    const q = this.query().trim().toLowerCase();
+    const g = this.genre();
+    const list = this.catalog().filter(b =>
+      (!g || b.genre === g) &&
+      (!q || `${b.title} ${b.author} ${b.genre ?? ''}`.toLowerCase().includes(q)));
+    const by: Record<SortKey, (a: Book, b: Book) => number> = {
+      recent: (a, b) => new Date(b.createdDate ?? 0).getTime() - new Date(a.createdDate ?? 0).getTime(),
+      title: (a, b) => a.title.localeCompare(b.title),
+      author: (a, b) => a.author.localeCompare(b.author),
+      rating: (a, b) => (b.averageRating || 0) - (a.averageRating || 0)
+    };
+    return [...list].sort(by[this.sort()]);
+  });
+
+  /** three books shown as a decorative stack in the hero: best rated first */
+  protected shelf = computed(() =>
+    [...this.catalog()].sort((a, b) => (b.averageRating || 0) - (a.averageRating || 0)).slice(0, 3));
+
+  protected pageItems = computed(() => this.filtered().slice(this.first(), this.first() + this.rows()));
+  protected hasFilters = computed(() => !!this.query().trim() || !!this.genre());
+
+  // ---- "Ask your library" (semantic search) ----
+  protected askQuery = signal('');
+  protected askLoading = signal(false);
+  protected askError = signal(false);
+  protected askedFor = signal<string | null>(null);
+  protected askResults = signal<Book[]>([]);
+  protected readonly examples = [
+    'A book about keeping business rules independent of frameworks',
+    'Something to learn about space and the universe',
+    'A gripping story with a mystery'
+  ];
+
+  ngOnInit(): void {
+    this.loadCatalog();
   }
 
-  clearSearch(): void {
-    this.searchKeyword = '';
-    if (this.table) {
-      this.table.reset();
-    }
+  protected loadCatalog(): void {
+    this.loading.set(true);
+    this.loadFailed.set(false);
+    this.bookService.getAllBooks(0, PAGE_SIZE_FETCH, 'createdDate', -1).pipe(
+      expand(res => (res.last ? EMPTY : this.bookService.getAllBooks(res.pageNumber + 1, PAGE_SIZE_FETCH, 'createdDate', -1))),
+      reduce((all, res) => all.concat(res.content), [] as Book[]),
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe({
+      next: books => {
+        this.catalog.set(books);
+        this.loading.set(false);
+      },
+      error: err => {
+        console.error('Error loading books:', err);
+        this.loadFailed.set(true);
+        this.loading.set(false);
+      }
+    });
   }
 
-  getAvailabilitySeverity(isAvailable: boolean): 'success' | 'danger' {
-    return isAvailable ? 'success' : 'danger';
+  // ---- filters ----
+  protected setQuery(value: string): void {
+    this.query.set(value);
+    this.first.set(0);
   }
 
-  viewBook(book: Book): void {
+  protected setGenre(name: string | null): void {
+    this.genre.set(this.genre() === name ? null : name);
+    this.first.set(0);
+  }
+
+  protected setSort(value: SortKey): void {
+    this.sort.set(value);
+    this.first.set(0);
+  }
+
+  protected clearFilters(): void {
+    this.query.set('');
+    this.genre.set(null);
+    this.first.set(0);
+  }
+
+  protected setView(mode: ViewMode): void {
+    this.view.set(mode);
+    try { localStorage.setItem(VIEW_KEY, mode); } catch { /* storage unavailable: not persisted */ }
+  }
+
+  protected onPage(event: PaginatorState): void {
+    this.first.set(event.first ?? 0);
+    this.rows.set(event.rows ?? this.rows());
+    document.getElementById('catalogue')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ---- ask ----
+  protected ask(question = this.askQuery()): void {
+    const q = question.trim();
+    if (!q || this.askLoading()) return;
+    this.askQuery.set(q);
+    this.askLoading.set(true);
+    this.askError.set(false);
+    this.askedFor.set(q);
+    this.aiSearch.search(q).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: results => {
+        this.askResults.set(results ?? []);
+        this.askLoading.set(false);
+      },
+      error: err => {
+        console.error('Semantic search failed:', err);
+        this.askResults.set([]);
+        this.askError.set(true);
+        this.askLoading.set(false);
+      }
+    });
+  }
+
+  protected closeAsk(): void {
+    this.askedFor.set(null);
+    this.askResults.set([]);
+    this.askError.set(false);
+  }
+
+  protected askAssistant(): void {
+    this.chat.open(this.askedFor() ?? this.askQuery());
+  }
+
+  protected dot(genre?: string | null): string {
+    return genreDot(genre);
+  }
+
+  protected open(book: Book): void {
     this.router.navigate(['/books', book.id]);
   }
 
-  editBook(book?: Book): void {
-    if (book) {
-      this.router.navigate(['/books', book.id, 'edit']);
-    } else {
-      this.router.navigate(['/create-book']);
-    }
-  }
+  protected skeletons = Array.from({ length: 8 }, (_, i) => i);
 
-  deleteBook(book: Book): void {
-    if (confirm(`Are you sure you want to delete "${book.title}"?`)) {
-      this.bookService.deleteBook(book.id).subscribe({
-        next: () => {
-          // If we deleted the last item on a page, go back one page
-          if (this.books.length === 1 && this.first > 0) {
-            this.first = Math.max(0, this.first - this.rows);
-          }
-          this.table?.reset();
-        },
-        error: (err) => console.error('❌ Error deleting book:', err)
-      });
-    }
+  private readView(): ViewMode {
+    try { return localStorage.getItem(VIEW_KEY) === 'table' ? 'table' : 'grid'; } catch { return 'grid'; }
   }
 }

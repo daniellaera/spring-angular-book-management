@@ -1,167 +1,198 @@
-<div class="books-container">
-  <p-card class="header-card">
-    <div class="flex justify-content-between align-items-center flex-wrap gap-3">
+<div class="page container">
+
+  <!-- Hero: "Ask your library" -->
+  <section class="hero" aria-labelledby="hero-title">
+   <div class="hero__grid">
+    <div class="hero__text">
+    <p class="eyebrow">{{ catalog().length }} books · understands meaning, not just keywords</p>
+    <h1 id="hero-title" class="hero__title">Ask your <em>library</em> anything.</h1>
+    <p class="hero__lead">Describe what you feel like reading in your own words and get the closest books from your collection.</p>
+
+    <form class="ask" role="search" aria-label="Ask your library" (ngSubmit)="ask()">
+      <i class="pi pi-sparkles ask__icon" aria-hidden="true"></i>
+      <label for="ask-input" class="sr-only">Describe the book you are looking for</label>
+      <input
+        id="ask-input" name="ask" type="text" class="ask__input" autocomplete="off"
+        [ngModel]="askQuery()" (ngModelChange)="askQuery.set($event)"
+        placeholder="A book about keeping business rules independent of frameworks…" />
+      <p-button type="submit" label="Ask" icon="pi pi-arrow-right" iconPos="right"
+                [loading]="askLoading()" />
+    </form>
+
+    <div class="examples">
+      <span class="muted">Try</span>
+      @for (ex of examples; track ex) {
+        <button type="button" class="chip" (click)="ask(ex)">{{ ex }}</button>
+      }
+    </div>
+
+    </div>
+
+    @if (shelf().length) { <app-hero-shelf [books]="shelf()" /> }
+   </div>
+
+    <div class="results-live" aria-live="polite">
+      @if (askedFor(); as asked) {
+        <section class="results panel rise" aria-label="Search results">
+          <header class="results__head">
+            <h2 class="results__title">Best matches for “{{ asked }}”</h2>
+            <div class="results__actions">
+              <p-button label="Ask the assistant" icon="pi pi-sparkles" size="small" [outlined]="true" (onClick)="askAssistant()" />
+              <button type="button" class="icon-btn" (click)="closeAsk()" aria-label="Close results"><i class="pi pi-times" aria-hidden="true"></i></button>
+            </div>
+          </header>
+
+          @if (askLoading()) {
+            <div class="grid grid--results" aria-busy="true">
+              @for (s of skeletons.slice(0, 4); track s) { <div class="skeleton sk-card"></div> }
+            </div>
+          } @else if (askError()) {
+            <p class="state-text"><i class="pi pi-exclamation-circle" aria-hidden="true"></i> Semantic search is unavailable right now. Try again in a moment, or browse the catalogue below.</p>
+          } @else if (askResults().length === 0) {
+            <p class="state-text"><i class="pi pi-search" aria-hidden="true"></i> No close matches. Try describing the topic or mood differently.</p>
+          } @else {
+            <div class="grid grid--results" role="list">
+              @for (b of askResults(); track b.id; let i = $index) {
+                <div role="listitem"><app-book-card [book]="b" [index]="i" /></div>
+              }
+            </div>
+          }
+        </section>
+      }
+    </div>
+  </section>
+
+  <!-- Catalogue -->
+  <section id="catalogue" class="catalogue" aria-labelledby="catalogue-title">
+    <div class="catalogue__head">
       <div>
-        <h1 class="text-4xl font-bold m-0 mb-2">
-          <i class="pi pi-book mr-2" style="color: var(--primary-color)"></i>
-          Book Library
-        </h1>
-        <p class="text-color-secondary m-0">Manage your book collection</p>
+        <h2 id="catalogue-title" class="catalogue__title">The catalogue</h2>
+        <p class="muted tnum" aria-live="polite">
+          @if (loading()) { Loading… } @else { {{ filtered().length }} of {{ catalog().length }} books }
+        </p>
       </div>
-      <p-button
-        label="Add Book"
-        icon="pi pi-plus"
-        severity="success"
-        [raised]="true"
-        (click)="editBook()">
-      </p-button>
-    </div>
-  </p-card>
-
-  <p-card class="content-card mt-4">
-    <div class="flex gap-3 mb-4 flex-wrap">
-      <p-iconfield iconPosition="left" class="flex-1" style="min-width: 250px">
-        <p-inputicon class="pi pi-search"></p-inputicon>
-        <input
-          pInputText
-          type="text"
-          [(ngModel)]="searchKeyword"
-          (keyup.enter)="onSearch()"
-          placeholder="Search by title or author..."
-          class="w-full" />
-      </p-iconfield>
-
-      <p-button
-        label="Search"
-        icon="pi pi-search"
-        (click)="onSearch()"
-        [outlined]="true">
-      </p-button>
-
-      <p-button
-        label="Clear"
-        icon="pi pi-filter-slash"
-        severity="secondary"
-        [outlined]="true"
-        (click)="clearSearch()">
-      </p-button>
+      <a class="add-btn" routerLink="/create-book">
+        <i class="pi pi-plus" aria-hidden="true"></i> Add book
+      </a>
     </div>
 
-    <p-table
-      #dt
-      [value]="books"
-      [loading]="loading"
-      [lazy]="true"
-      (onLazyLoad)="loadBooks($event)"
-      [paginator]="true"
-      [rows]="rows"
-      [totalRecords]="totalRecords"
-      [(first)]="first"
-      [showCurrentPageReport]="true"
-      currentPageReportTemplate="Showing {first} to {last} of {totalRecords} books"
-      [rowsPerPageOptions]="[5, 10, 25, 50]"
-      [tableStyle]="{'min-width': '60rem'}"
-      [rowHover]="true"
-      class="p-datatable-striped">
+    <div class="toolbar">
+      <div class="field field--search">
+        <i class="pi pi-search" aria-hidden="true"></i>
+        <label for="filter-input" class="sr-only">Filter by title, author or genre</label>
+        <input id="filter-input" type="search" autocomplete="off" placeholder="Filter by title, author or genre"
+               [ngModel]="query()" (ngModelChange)="setQuery($event)" />
+      </div>
 
-      <ng-template pTemplate="header">
-        <tr>
-          <th pSortableColumn="title" style="width: 25%">
-            <div class="flex align-items-center">
-              Title <p-sorticon field="title"></p-sorticon>
-            </div>
-          </th>
-          <th pSortableColumn="author" style="width: 18%">
-            <div class="flex align-items-center">
-              Author <p-sorticon field="author"></p-sorticon>
-            </div>
-          </th>
-          <th style="width: 12%">Genre</th>
-          <th style="width: 12%">ISBN</th>
-          <th pSortableColumn="averageRating" style="width: 10%">
-            <div class="flex align-items-center">
-              Rating <p-sorticon field="averageRating"></p-sorticon>
-            </div>
-          </th>
-          <th style="width: 10%">Status</th>
-          <th style="width: 13%">Actions</th>
-        </tr>
-      </ng-template>
+      <div class="toolbar__right">
+        <p-select inputId="sort-select" [options]="sortOptions" optionLabel="label" optionValue="value"
+                  [ngModel]="sort()" (ngModelChange)="setSort($event)" ariaLabel="Sort books" />
 
-      <ng-template pTemplate="body" let-book>
-        <tr>
-          <td>
-            <div class="flex align-items-center gap-2">
-              <i class="pi pi-book text-2xl" style="color: var(--primary-color)"></i>
-              <div>
-                <div class="font-semibold">{{ book.title }}</div>
-                @if (book.publishedDate) {
-                  <small class="text-color-secondary">
-                    Published {{ book.publishedDate | date: 'yyyy' }}
-                  </small>
+        <div class="seg" role="group" aria-label="View mode">
+          <button type="button" [attr.aria-pressed]="view() === 'grid'" (click)="setView('grid')" aria-label="Grid view">
+            <i class="pi pi-th-large" aria-hidden="true"></i>
+          </button>
+          <button type="button" [attr.aria-pressed]="view() === 'table'" (click)="setView('table')" aria-label="Table view">
+            <i class="pi pi-list" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    @if (genres().length) {
+      <div class="chips" role="group" aria-label="Filter by genre">
+        <button type="button" class="chip" [attr.aria-pressed]="!genre()" (click)="setGenre(null)">All <span class="count">{{ catalog().length }}</span></button>
+        @for (g of genres(); track g.name) {
+          <button type="button" class="chip" [attr.aria-pressed]="genre() === g.name" (click)="setGenre(g.name)">
+            <span class="dot" [style.background]="dot(g.name)" aria-hidden="true"></span>{{ g.name }} <span class="count">{{ g.count }}</span>
+          </button>
+        }
+      </div>
+    }
+
+    @if (loading()) {
+      <div class="grid" aria-busy="true" aria-label="Loading books">
+        @for (s of skeletons; track s) { <div class="skeleton sk-card"></div> }
+      </div>
+    } @else if (loadFailed()) {
+      <div class="state panel">
+        <i class="pi pi-exclamation-triangle state__icon" aria-hidden="true"></i>
+        <h3>The catalogue could not be loaded</h3>
+        <p class="muted">Check your connection and try again.</p>
+        <p-button label="Try again" icon="pi pi-refresh" (onClick)="loadCatalog()" />
+      </div>
+    } @else if (filtered().length === 0) {
+      <div class="state panel">
+        <i class="pi pi-inbox state__icon" aria-hidden="true"></i>
+        @if (hasFilters()) {
+          <h3>No books match</h3>
+          <p class="muted">Try a different word or remove a filter.</p>
+          <p-button label="Clear filters" icon="pi pi-filter-slash" severity="secondary" [outlined]="true" (onClick)="clearFilters()" />
+        } @else {
+          <h3>Your library is empty</h3>
+          <p class="muted">Add the first book to get started.</p>
+          <p-button label="Add a book" icon="pi pi-plus" routerLink="/create-book" />
+        }
+      </div>
+    } @else if (view() === 'grid') {
+      <div class="grid" role="list">
+        @for (b of pageItems(); track b.id; let i = $index) {
+          <div role="listitem"><app-book-card [book]="b" [index]="i" /></div>
+        }
+      </div>
+      @if (filtered().length > 12) {
+        <p-paginator [first]="first()" [rows]="rows()" [totalRecords]="filtered().length"
+                     [rowsPerPageOptions]="[12, 24, 48]" [showCurrentPageReport]="true"
+                     currentPageReportTemplate="{first}–{last} of {totalRecords}"
+                     (onPageChange)="onPage($event)" />
+      }
+    } @else {
+      <div class="table-wrap panel">
+        <p-table [value]="filtered()" [paginator]="filtered().length > 10" [rows]="10" [rowsPerPageOptions]="[10, 25, 50]"
+                 [rowHover]="true" [tableStyle]="{ 'min-width': '34rem' }">
+          <ng-template #header>
+            <tr>
+              <th pSortableColumn="title" scope="col">Title <p-sorticon field="title" /></th>
+              <th pSortableColumn="author" scope="col" class="hide-sm">Author <p-sorticon field="author" /></th>
+              <th scope="col" class="hide-md">Genre</th>
+              <th scope="col" class="hide-lg">ISBN</th>
+              <th pSortableColumn="averageRating" scope="col">Rating <p-sorticon field="averageRating" /></th>
+              <th scope="col">Status</th>
+            </tr>
+          </ng-template>
+          <ng-template #body let-b>
+            <tr>
+              <td>
+                <div class="row-title">
+                  <div class="row-cover"><app-book-cover [book]="b" size="sm" /></div>
+                  <div>
+                    <a class="row-link" [routerLink]="['/books', b.id]">{{ b.title }}</a>
+                    <div class="muted small show-sm-only">{{ b.author }}</div>
+                    @if (b.publishedDate) { <div class="muted small tnum hide-sm">Published {{ b.publishedDate | date: 'yyyy' }}</div> }
+                  </div>
+                </div>
+              </td>
+              <td class="hide-sm">{{ b.author }}</td>
+              <td class="hide-md">
+                @if (b.genre) { <span class="chip chip--static"><span class="dot" [style.background]="dot(b.genre)" aria-hidden="true"></span>{{ b.genre }}</span> }
+              </td>
+              <td class="hide-lg tnum muted">{{ b.isbn }}</td>
+              <td class="tnum">
+                @if (b.averageRating) {
+                  <span class="rating" [attr.aria-label]="'Rated ' + b.averageRating + ' out of 5'"><i class="pi pi-star-fill" aria-hidden="true"></i>{{ b.averageRating }}</span>
+                } @else { <span class="muted small">—</span> }
+              </td>
+              <td>
+                @if (b.isAvailable) {
+                  <span class="badge badge--ok"><i class="pi pi-check-circle" aria-hidden="true"></i>Available</span>
+                } @else {
+                  <span class="badge badge--busy"><i class="pi pi-clock" aria-hidden="true"></i>Borrowed</span>
                 }
-              </div>
-            </div>
-          </td>
-          <td>{{ book.author }}</td>
-          <td>
-            <p-tag [value]="book.genre || 'N/A'" severity="secondary" [rounded]="true"></p-tag>
-          </td>
-          <td><span class="font-mono text-sm">{{ book.isbn }}</span></td>
-          <td>
-            @if (book.averageRating) {
-              <div class="flex align-items-center gap-2">
-                <i class="pi pi-star-fill" style="color: #fbbf24"></i>
-                <span class="font-semibold">{{ book.averageRating }}</span>
-              </div>
-            } @else {
-              <span class="text-color-secondary text-sm">No ratings</span>
-            }
-          </td>
-          <td>
-            <p-tag [severity]="getAvailabilitySeverity(book.isAvailable)" [rounded]="true">
-              <i [class]="book.isAvailable ? 'pi pi-check' : 'pi pi-times'" class="mr-1"></i>
-              {{ book.isAvailable ? 'Available' : 'Borrowed' }}
-            </p-tag>
-          </td>
-          <td>
-            <div class="flex gap-2">
-              <p-button
-                icon="pi pi-eye"
-                [rounded]="true"
-                [outlined]="true"
-                severity="info"
-                size="small"
-                (click)="viewBook(book)"
-                pTooltip="View Details"
-                tooltipPosition="top">
-              </p-button>
-              <p-button
-                icon="pi pi-pencil"
-                [rounded]="true"
-                [outlined]="true"
-                severity="warn"
-                size="small"
-                (click)="editBook(book)"
-                pTooltip="Edit"
-                tooltipPosition="top">
-              </p-button>
-            </div>
-          </td>
-        </tr>
-      </ng-template>
-
-      <ng-template pTemplate="emptymessage">
-        <tr>
-          <td colspan="7">
-            <div class="flex flex-column align-items-center justify-content-center p-6">
-              <i class="pi pi-inbox text-6xl text-color-secondary mb-3"></i>
-              <h3 class="text-xl font-semibold mb-2">No books found</h3>
-              <p class="text-color-secondary m-0">Try adjusting your search or add a new book</p>
-            </div>
-          </td>
-        </tr>
-      </ng-template>
-    </p-table>
-  </p-card>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </div>
+    }
+  </section>
 </div>
