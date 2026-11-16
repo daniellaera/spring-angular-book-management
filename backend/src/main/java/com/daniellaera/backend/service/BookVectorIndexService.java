@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 @Slf4j
@@ -19,12 +20,31 @@ public class BookVectorIndexService {
     static final int BATCH_SIZE = 64;
     static final int VECTOR_SIZE = 768;
 
-    /** Outcome of an indexing run. {@code failed} = books whose embedding could not be produced. */
-    public record IndexResult(int indexed, int skipped, int deleted, int failed) {
+    public static final String TRIGGER_MANUAL = "manual";
+    public static final String TRIGGER_SCHEDULED = "scheduled";
+    public static final String TRIGGER_EVENT = "event";
+
+    /**
+     * Outcome of an indexing run. {@code failed} = books whose embedding could not be produced;
+     * {@code alreadyRunning} = the run was not executed because another full run was in progress.
+     */
+    public record IndexResult(int indexed, int skipped, int deleted, int failed, boolean alreadyRunning) {
+        public IndexResult(int indexed, int skipped, int deleted, int failed) {
+            this(indexed, skipped, deleted, failed, false);
+        }
+
+        public static IndexResult skippedAlreadyRunning() {
+            return new IndexResult(0, 0, 0, 0, true);
+        }
+
         public String summary() {
+            if (alreadyRunning) return "Skipped: indexing already in progress";
             return "Indexed " + indexed + ", skipped " + skipped + ", deleted " + deleted + ", failed " + failed;
         }
     }
+
+    /** In-JVM guard: the app runs as a single instance, so one flag is enough (no distributed lock). */
+    private final AtomicBoolean fullRunInProgress = new AtomicBoolean(false);
 
     private final WebClient webClient;
     private final BookRepository bookRepository;
@@ -43,10 +63,60 @@ public class BookVectorIndexService {
         this.embeddingService = embeddingService;
     }
 
-    /** Incremental: only new/changed books are re-embedded; points of removed books are deleted. */
+    /** Manual trigger (POST /index). */
     public IndexResult indexAllBooks() {
+        return indexAllBooks(TRIGGER_MANUAL);
+    }
+
+    /**
+     * Incremental full run: only new/changed books are re-embedded; points of removed books are deleted.
+     * Guarded: if another full run is already in progress this one is skipped (logged) and returns
+     * {@link IndexResult#skippedAlreadyRunning()}. {@code trigger} is only used for the log lines.
+     */
+    public IndexResult indexAllBooks(String trigger) {
+        if (!fullRunInProgress.compareAndSet(false, true)) {
+            log.info("indexing skipped trigger={} reason=already-running", trigger);
+            return IndexResult.skippedAlreadyRunning();
+        }
+        long start = System.nanoTime();
+        log.info("indexing start trigger={}", trigger);
+        try {
+            IndexResult result = doIndexAll();
+            log.info("indexing done trigger={} books={} durationMs={} indexed={} skipped={} deleted={} failed={}",
+                    trigger, result.indexed() + result.skipped() + result.failed(),
+                    (System.nanoTime() - start) / 1_000_000,
+                    result.indexed(), result.skipped(), result.deleted(), result.failed());
+            return result;
+        } finally {
+            fullRunInProgress.set(false);
+        }
+    }
+
+    /**
+     * Event-driven: (re)index one book by its deterministic point id (the book id), or remove its point when the
+     * book no longer exists. Same document text, embedding and point layout as the full run.
+     * Throws if Ollama/Qdrant fail: the caller (the on-change listener) catches and logs.
+     */
+    public void indexBook(Integer bookId) {
+        Optional<Book> book = bookRepository.findById(bookId);
+        if (book.isEmpty()) {
+            if (!deletePoints(List.of(bookId))) {
+                throw new IllegalStateException("Qdrant delete of book " + bookId + " failed");
+            }
+            return;
+        }
+        String text = buildBookText(book.get());
+        List<Double> embedding = embeddingService.embed(text);
+        if (!validEmbedding(embedding)) {
+            throw new IllegalStateException("no valid embedding for book " + bookId);
+        }
+        if (!upsert(List.of(buildPoint(book.get(), sha256(text), embedding)))) {
+            throw new IllegalStateException("Qdrant upsert of book " + bookId + " failed");
+        }
+    }
+
+    private IndexResult doIndexAll() {
         List<Book> books = bookRepository.findAll();
-        log.info("Indexing up to {} books into Qdrant", books.size());
 
         Map<Integer, String> existing = fetchExistingHashes(); // null if Qdrant could not be read
         Map<Integer, String> known = existing != null ? existing : Map.of();
@@ -64,25 +134,14 @@ public class BookVectorIndexService {
             }
 
             List<Double> embedding = embeddingService.embed(text);
-            if (embedding == null || embedding.size() != VECTOR_SIZE) {
+            if (!validEmbedding(embedding)) {
                 log.warn("Skipping book {}: invalid embedding (size {})", book.getTitle(),
                         embedding == null ? "null" : embedding.size());
                 failed++;
                 continue;
             }
 
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("bookId", book.getId());
-            payload.put("title", book.getTitle());
-            payload.put("author", book.getAuthor() != null ? book.getAuthor() : "Unknown");
-            payload.put("genre", book.getGenre() != null ? book.getGenre() : "Unknown");
-            payload.put("contentHash", hash);
-
-            Map<String, Object> point = new HashMap<>();
-            point.put("id", book.getId());
-            point.put("vector", embedding);
-            point.put("payload", payload);
-            batch.add(point);
+            batch.add(buildPoint(book, hash, embedding));
 
             if (batch.size() >= BATCH_SIZE) {
                 if (upsert(batch)) indexed += batch.size(); else failed += batch.size();
@@ -103,9 +162,27 @@ public class BookVectorIndexService {
             }
         }
 
-        IndexResult result = new IndexResult(indexed, skipped, deleted, failed);
-        log.info("Qdrant indexing done: {}", result.summary());
-        return result;
+        return new IndexResult(indexed, skipped, deleted, failed);
+    }
+
+    private static boolean validEmbedding(List<Double> embedding) {
+        return embedding != null && embedding.size() == VECTOR_SIZE;
+    }
+
+    /** The point id is the book id: deterministic, so re-indexing a book overwrites its point (upsert), never duplicates. */
+    static Map<String, Object> buildPoint(Book book, String hash, List<Double> embedding) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("bookId", book.getId());
+        payload.put("title", book.getTitle());
+        payload.put("author", book.getAuthor() != null ? book.getAuthor() : "Unknown");
+        payload.put("genre", book.getGenre() != null ? book.getGenre() : "Unknown");
+        payload.put("contentHash", hash);
+
+        Map<String, Object> point = new HashMap<>();
+        point.put("id", book.getId());
+        point.put("vector", embedding);
+        point.put("payload", payload);
+        return point;
     }
 
     /** Best effort: never throws. Used when a book is deleted. */
