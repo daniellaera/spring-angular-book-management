@@ -6,11 +6,12 @@ import com.daniellaera.backend.repository.BookRepository;
 import com.daniellaera.backend.repository.UserRepository;
 import com.daniellaera.backend.service.AiCacheService;
 import com.daniellaera.backend.service.BookService;
-import com.daniellaera.backend.service.BookVectorIndexService;
+import com.daniellaera.backend.indexing.BookChangedEvent;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -31,18 +32,18 @@ public class BookServiceImpl implements BookService {
     private final UserRepository userRepository;
     private final BorrowRepository borrowRepository;
     private final AiCacheService aiCacheService;
-    private final BookVectorIndexService vectorIndexService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Autowired
     public BookServiceImpl(BookRepository bookRepository,
                            UserRepository userRepository,
                            BorrowRepository borrowRepository, AiCacheService aiCacheService,
-                           BookVectorIndexService vectorIndexService) {
+                           ApplicationEventPublisher eventPublisher) {
         this.bookRepository = bookRepository;
         this.userRepository = userRepository;
         this.borrowRepository = borrowRepository;
         this.aiCacheService = aiCacheService;
-        this.vectorIndexService = vectorIndexService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -76,6 +77,7 @@ public class BookServiceImpl implements BookService {
         Book savedBook = bookRepository.save(book);
 
         aiCacheService.clear();
+        eventPublisher.publishEvent(new BookChangedEvent(savedBook.getId(), BookChangedEvent.Type.CREATED));
 
         return convertBookEntityToBookDto(savedBook);
     }
@@ -89,7 +91,7 @@ public class BookServiceImpl implements BookService {
         bookRepository.delete(book);
         log.info("Book with id: {} deleted", bookId);
         aiCacheService.clear();
-        vectorIndexService.deleteBookPoint(bookId); // best effort, never throws
+        eventPublisher.publishEvent(new BookChangedEvent(bookId, BookChangedEvent.Type.DELETED));
     }
 
     @Override

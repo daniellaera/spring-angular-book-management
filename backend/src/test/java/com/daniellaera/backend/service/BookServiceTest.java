@@ -2,6 +2,7 @@ package com.daniellaera.backend.service;
 
 import com.daniellaera.backend.dao.BookDTO;
 import com.daniellaera.backend.dao.UserDTO;
+import com.daniellaera.backend.indexing.BookChangedEvent;
 import com.daniellaera.backend.model.Book;
 import com.daniellaera.backend.model.User;
 import com.daniellaera.backend.repository.BookRepository;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -54,12 +56,12 @@ public class BookServiceTest {
     private AiCacheService aiCacheService;
 
     @Mock
-    private BookVectorIndexService vectorIndexService;
+    private ApplicationEventPublisher eventPublisher;
 
     @BeforeEach
     public void setUp() {
         // to remove in case we @InjectMocks of bookServiceImpl
-        bookService = new BookServiceImpl(bookRepository, userRepository, borrowRepository, aiCacheService, vectorIndexService);
+        bookService = new BookServiceImpl(bookRepository, userRepository, borrowRepository, aiCacheService, eventPublisher);
     }
 
     @Test
@@ -140,6 +142,7 @@ public class BookServiceTest {
         Book capturedBook = bookCaptor.getValue();
         assertThat(capturedBook.getTitle()).isEqualTo("Test Book");
         assertThat(capturedBook.getCreatedBy().getEmail()).isEqualTo("test@example.com");
+        verify(eventPublisher).publishEvent(new BookChangedEvent(1, BookChangedEvent.Type.CREATED));
     }
 
     @Test
@@ -174,7 +177,7 @@ public class BookServiceTest {
         bookService.deleteBook(bookId);
 
         verify(bookRepository, times(1)).delete(book);
-        verify(vectorIndexService).deleteBookPoint(bookId);
+        verify(eventPublisher).publishEvent(new BookChangedEvent(bookId, BookChangedEvent.Type.DELETED));
     }
 
     @Test
