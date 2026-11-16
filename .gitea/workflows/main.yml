@@ -21,6 +21,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      deploy: ${{ steps.filter.outputs.deploy }}
     steps:
       - name: Login to Gitea Registry
         run: echo "${{ secrets.GIT_PASSWORD }}" | docker login 192.168.1.103:3000 -u "${{ secrets.GIT_USERNAME }}" --password-stdin
@@ -35,6 +36,9 @@ jobs:
               - 'backend/**'
             frontend:
               - 'frontend/**'
+            deploy:
+              - '.gitea/workflows/**'
+              - 'deploy/**'
 
   # 2. Backend Build and Test
   build-and-test-backend:
@@ -114,7 +118,11 @@ jobs:
     name: Build Images, Push to Gitea Registry & Deploy
     runs-on: ubuntu-latest
     container: 192.168.1.103:3000/daniellaera/ci-java21-node24:24.04-1
-    needs: [ build-and-test-backend, build-and-test-frontend ]
+    needs: [ detect-changes, build-and-test-backend, build-and-test-frontend ]
+    # A skipped test job (nothing changed there) must not skip the image job: by default a job whose
+    # `needs` include a skipped job is skipped too. always() lifts that; the result checks keep failed
+    # tests blocking the deploy, and a docs-only push (no backend/frontend/workflow/deploy change) builds nothing.
+    if: ${{ always() && needs.detect-changes.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.build-and-test-backend.result) && contains(fromJSON('["success","skipped"]'), needs.build-and-test-frontend.result) && (needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.deploy == 'true') }}
     steps:
       - uses: actions/checkout@v4
 
