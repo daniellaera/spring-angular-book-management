@@ -8,6 +8,13 @@ spring:
             client-secret: test-client-secret
             redirect-uri: http://localhost:4200/login/oauth2/code/github
   ai:
+    mcp:
+      server:
+        name: book-library
+        version: 1.0.0
+        protocol: STATELESS
+        streamable-http:
+          mcp-endpoint: /mcp
     anthropic:
       api-key: simple-api-key
 
