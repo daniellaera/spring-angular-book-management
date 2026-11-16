@@ -124,10 +124,11 @@ public class BookAiController {
 
         recordRequest(caller);
 
+        BookTools tools = newTools(caller);
         var response = chatClient.prompt()
                 .system(SYSTEM_PROMPT)
                 .user(question)
-                .tools(newTools(caller))
+                .tools(tools)
                 .call()
                 .chatResponse();
 
@@ -143,7 +144,14 @@ public class BookAiController {
                 response.getMetadata() != null ? response.getMetadata().getModel() : null,
                 response.getMetadata() != null ? response.getMetadata().getUsage() : null);
 
-        return Map.of("answer", answer);
+        // usage and tool-call count make cost visible to clients (deploy/ai-eval.sh prints them)
+        Usage usage = response.getMetadata() != null ? response.getMetadata().getUsage() : null;
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put("answer", answer);
+        out.put("inputTokens", usage != null && usage.getPromptTokens() != null ? usage.getPromptTokens() : 0);
+        out.put("outputTokens", usage != null && usage.getCompletionTokens() != null ? usage.getCompletionTokens() : 0);
+        out.put("toolCalls", tools.callsMade());
+        return out;
     }
 
     @PostMapping("/index")
