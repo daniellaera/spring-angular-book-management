@@ -60,6 +60,7 @@ Source of truth: Infisical (192.168.1.163), project `book-management`, env `prod
 | `DATABASE_PASSWORD` | NEW (`openssl rand -base64 36 | tr -d '/+=' `), replaces `testpass` |
 | `JWT_SECRET` | NEW, `openssl rand -base64 64` (JwtService does `Decoders.BASE64.decode`, so Base64 is required; the old one is in a public repo = compromised) |
 | `INDEX_API_TOKEN` | NEW, `openssl rand -hex 32` |
+| `MCP_API_TOKEN` | NEW, `openssl rand -hex 32`; Bearer token for the `/mcp` server (see `docs/AI.md`); empty/absent = `/mcp` answers 401 to everyone |
 | `ANTHROPIC_MODEL` | `claude-haiku-5-5` |
 | `GITEA_REGISTRY_USER`, `GITEA_REGISTRY_TOKEN` | Gitea user + personal access token with only `read:package`, used by redeploy.sh to pull images |
 `QDRANT_URL` and `DATABASE_URL` are fixed in `deploy/compose.prod.yml` (internal service names).
@@ -76,6 +77,8 @@ Containers receive secrets as environment variables at `up` time (no `.env` on d
 - Deploy: push to `main` (CI) or manually `ssh root@<LXC> /opt/book-management/deploy/redeploy.sh <sha>`.
 - Health: `curl -fsS http://<LXC>:8081/api/v3/book`; logs: `docker compose -f /opt/book-management/deploy/compose.prod.yml logs -f book-backend`.
 - Rollback: automatic on a failed health check (previous tags in `/var/lib/book-management/*.tag`). Manual: run redeploy.sh with an older tag. Older images stay on CT 110 under the Gitea names (e.g. `192.168.1.103:3000/daniellaera/book-backend:local-features1`).
+- MCP server: `POST /mcp` with `Authorization: Bearer <MCP_API_TOKEN>` (nginx in the frontend container proxies it to the backend). Connect Claude Code/Desktop and test: `docs/AI.md`.
+- AI eval (15 questions, prints pass/fail, tokens, latency): `deploy/ai-eval.sh https://bookmanagement.daniellaera.com [--fresh]`.
 - Reindex Qdrant: `POST /api/v3/ai/books/index` with header `X-Index-Token` (value from Infisical `INDEX_API_TOKEN`).
 
 ## Cutover procedure (used; repeat for any re-do)
