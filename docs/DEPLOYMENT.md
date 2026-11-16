@@ -9,7 +9,7 @@ Status of the migration from VM `app-book-dev` (+ separate DB host `book-managem
 | 0-1 Audit, land AI hardening | Done. 75 tests green (run in `maven:3.9.9-temurin-21` with the Docker socket; local JDK 25 breaks Lombok). |
 | 2 Secrets | **Done**: 11 secrets in Infisical (project `book-management`, env `prod`), runtime identity `book-runtime` (Viewer). `DATABASE_URL` and `QDRANT_URL` are NOT in Infisical: fixed in `compose.prod.yml` (internal service names). The tmpfs staging files were shredded. |
 | 3 LXC | **Done**: CT 110 (192.168.1.110, Debian 13, unprivileged, nesting, 2 vCPU/4 GB/20 GB, onboot). |
-| 4 Pipeline | Workflow ready (not pushed, not yet exercised). Needs Gitea secrets `VM_HOST`=192.168.1.110, `VM_USER`=root, `VM_SSH_PORT`=22, `SSH_PRIVATE_KEY` authorised on the LXC, and `GITEA_REGISTRY_USER` / `GITEA_REGISTRY_TOKEN` in Infisical (without them redeploy.sh uses local images only). See "Container registry" below. |
+| 4 Pipeline | **Done and exercised** (Gitea Actions, main -> test -> build -> push to the Gitea registry -> deploy to CT 110 with `redeploy.sh <sha>`). Gitea repo secrets: `VM_HOST`=192.168.1.110, `VM_USER`=root, `VM_SSH_PORT`=22, `SSH_PRIVATE_KEY` (dedicated deploy key, authorised on CT 110), `REGISTRY_PUSH_USER` + `REGISTRY_PUSH_TOKEN` (package read+write). Pull side: `GITEA_REGISTRY_USER` / `GITEA_REGISTRY_TOKEN` (read:package) in Infisical. Registry `192.168.1.103:3000` is declared insecure on CT 110 and runner VM 200. |
 | 5 Data + parallel run | Done, green. |
 | 6 Cutover | Final stop/dump/restore/count-compare done, stack live on `192.168.1.110:8081` with Infisical-injected secrets. NPM upstream switch is a manual step. The old backend container is STOPPED on `app-book-dev` (`docker start book-backend` = rollback). |
 
@@ -75,7 +75,7 @@ Containers receive secrets as environment variables at `up` time (no `.env` on d
 ## Runbook
 - Deploy: push to `main` (CI) or manually `ssh root@<LXC> /opt/book-management/deploy/redeploy.sh <sha>`.
 - Health: `curl -fsS http://<LXC>:8081/api/v3/book`; logs: `docker compose -f /opt/book-management/deploy/compose.prod.yml logs -f book-backend`.
-- Rollback: automatic on a failed health check (previous tags in `/var/lib/book-management/*.tag`). Manual: run redeploy.sh with an older sha.
+- Rollback: automatic on a failed health check (previous tags in `/var/lib/book-management/*.tag`). Manual: run redeploy.sh with an older tag. Older images stay on CT 110 under the Gitea names (e.g. `192.168.1.103:3000/daniellaera/book-backend:local-features1`).
 - Reindex Qdrant: `POST /api/v3/ai/books/index` with header `X-Index-Token` (value from Infisical `INDEX_API_TOKEN`).
 
 ## Cutover procedure (used; repeat for any re-do)
