@@ -186,12 +186,13 @@ public class BookVectorIndexService {
         }
     }
 
+    /** Lowercased on purpose: the embedding model is case-sensitive and queries are embedded lowercased (EmbeddingService). */
     static String buildBookText(Book book) {
         return String.join(". ",
                 book.getTitle() + " by " + book.getAuthor(),
                 "Genre: " + (book.getGenre() != null ? book.getGenre() : "Unknown"),
                 "Description: " + (book.getDescription() != null ? book.getDescription() : "")
-        ).trim();
+        ).trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     static String sha256(String text) {

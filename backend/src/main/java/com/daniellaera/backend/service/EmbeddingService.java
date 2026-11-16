@@ -38,14 +38,20 @@ public class EmbeddingService {
         return text == null ? "" : text.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
     }
 
-    /** Cached embedding for a user query; null when Ollama fails. */
+    /**
+     * Cached embedding for a user query; null when Ollama fails.
+     * nomic-embed-text is case-sensitive: "Effective Java" (Title Case) matched other Title Case texts such as "The Great
+     * Gatsby" and ranked the real book 27th of 32, while "effective java" ranked it first. Documents are embedded lowercased
+     * (BookVectorIndexService.buildBookText), so the query is embedded in the same normalised form that already keys the cache
+     * (before, the key was lowercased but the first caller's original casing was what got embedded and cached).
+     */
     public List<Double> embedQuery(String query) {
         String key = normalise(query);
         synchronized (queryCache) {
             List<Double> hit = queryCache.get(key);
             if (hit != null) return hit;
         }
-        List<Double> embedding = embed(query);
+        List<Double> embedding = embed(key);
         if (embedding != null && !embedding.isEmpty()) {
             synchronized (queryCache) {
                 queryCache.put(key, embedding);

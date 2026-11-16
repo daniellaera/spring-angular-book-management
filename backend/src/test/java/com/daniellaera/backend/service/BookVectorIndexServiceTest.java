@@ -56,6 +56,14 @@ class BookVectorIndexServiceTest {
     }
 
     @Test
+    void buildBookText_isLowercased_becauseTheEmbeddingModelIsCaseSensitive() {
+        Book b = new Book();
+        b.setTitle("Effective Java"); b.setAuthor("Joshua Bloch"); b.setGenre("Programming"); b.setDescription("Best Practices");
+        assertThat(BookVectorIndexService.buildBookText(b))
+                .isEqualTo("effective java by joshua bloch. genre: programming. description: best practices");
+    }
+
+    @Test
     void embedsOnlyNewOrChanged_skipsUnchanged_deletesOrphans() {
         Book unchanged = book(1, "Same");
         Book changed = book(2, "Edited");
