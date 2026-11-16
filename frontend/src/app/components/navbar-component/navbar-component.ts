@@ -1,133 +1,59 @@
-import { Component, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
-import { RouterLink } from '@angular/router';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { Subscription } from 'rxjs';
-
-import { ToolbarModule } from 'primeng/toolbar';
-import { ButtonModule } from 'primeng/button';
-import { ToggleSwitchModule } from 'primeng/toggleswitch';
+import { ChangeDetectionStrategy, Component, HostListener, computed, inject, signal } from '@angular/core';
+import { RouterLink, RouterLinkActive } from '@angular/router';
 import { MenuModule } from 'primeng/menu';
-import { BadgeModule } from 'primeng/badge';
 import { MenuItem } from 'primeng/api';
 
 import { AuthService } from '../../services/auth.service';
+import { ThemeService } from '../../services/theme.service';
+import { ChatUiService } from '../../services/chat-ui.service';
 
 @Component({
   selector: 'app-navbar',
-  standalone: true,
-  imports: [
-    CommonModule,
-    RouterLink,
-    FormsModule,
-    ToolbarModule,
-    ButtonModule,
-    ToggleSwitchModule,
-    MenuModule,
-    BadgeModule
-  ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink, RouterLinkActive, MenuModule],
   templateUrl: './navbar-component.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './navbar-component.scss'
 })
-export class NavbarComponent implements OnInit, OnDestroy {
-  isDarkMode = false;
-  userMenuItems: MenuItem[] = [];
+export class NavbarComponent {
+  protected auth = inject(AuthService);
+  protected theme = inject(ThemeService);
+  private chat = inject(ChatUiService);
 
-  private subscription = new Subscription();
+  protected scrolled = signal(false);
 
-  constructor(public authService: AuthService) {}
+  protected isLoggedIn = this.auth.isLoggedIn;
+  protected timeLeft = this.auth.timeLeft;
+  protected hasGitHub = computed(() => !!this.auth.userDetails().githubId);
+  protected fullName = computed(() => {
+    this.auth.userDetails(); // re-evaluate when the profile loads
+    return this.auth.getFullName();
+  });
+  protected initials = computed(() =>
+    this.fullName().split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || 'G');
 
-  ngOnInit(): void {
-    // Load theme - Check localStorage first
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'dark') {
-      this.isDarkMode = true;
-      document.documentElement.classList.add('my-app-dark');
-    } else {
-      this.isDarkMode = false;
-      document.documentElement.classList.remove('my-app-dark');
-    }
-
-    // Update menu when auth state changes
-    this.updateMenu();
-  }
-
-  ngOnDestroy(): void {
-    this.subscription.unsubscribe();
-  }
-
-  updateMenu(): void {
-    if (this.isLoggedIn()) {
-      this.userMenuItems = [
-        {
-          label: 'Profile',
-          icon: 'pi pi-user',
-          routerLink: ['/profile']
-        },
-        {
-          label: 'Settings',
-          icon: 'pi pi-cog',
-          routerLink: ['/settings']
-        },
-        { separator: true },
-        {
-          label: 'Logout',
-          icon: 'pi pi-sign-out',
-          command: () => this.authService.logout()
-        }
-      ];
-    } else {
-      this.userMenuItems = [
-        {
-          label: 'Login',
-          icon: 'pi pi-sign-in',
-          routerLink: ['/login']
-        },
-        {
-          label: 'Sign Up',
-          icon: 'pi pi-user-plus',
-          routerLink: ['/signup']
-        }
-      ];
-    }
-  }
-
-  toggleTheme(): void {
-    if (this.isDarkMode) {
-      document.documentElement.classList.add('my-app-dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('my-app-dark');
-      localStorage.setItem('theme', 'light');
-    }
-  }
-
-  isLoggedIn(): boolean {
-    return this.authService.isLoggedIn();
-  }
-
-  getTimeLeft(): number {
-    return this.authService.timeLeft();
-  }
-
-  getFullName(): string {
-    return this.authService.getFullName();
-  }
-
-  hasGitHub(): boolean {
-    return !!this.authService.userDetails().githubId;
-  }
-
-  formatTimeLeft(): string {
-    const time = this.getTimeLeft();
+  protected timeLabel = computed(() => {
+    const time = this.timeLeft();
     const hours = Math.floor(time / 3600);
     const minutes = Math.floor((time % 3600) / 60);
     const seconds = time % 60;
+    return hours > 0
+      ? `${hours}h ${minutes.toString().padStart(2, '0')}m`
+      : `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  });
+  protected sessionLow = computed(() => this.timeLeft() < 60);
 
-    if (hours > 0) {
-      return `${hours}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`;
-    }
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  protected menuItems: MenuItem[] = [
+    { label: 'Profile', icon: 'pi pi-user', routerLink: ['/profile'] },
+    { separator: true },
+    { label: 'Sign out', icon: 'pi pi-sign-out', command: () => this.auth.logout() }
+  ];
+
+  @HostListener('window:scroll')
+  protected onScroll(): void {
+    this.scrolled.set(window.scrollY > 4);
+  }
+
+  protected openAssistant(): void {
+    this.chat.toggle();
   }
 }

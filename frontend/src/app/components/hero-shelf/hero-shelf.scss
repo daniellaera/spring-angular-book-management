@@ -1,0 +1,10 @@
+:host { display: block; }
+.shelf { display: none; position: relative; height: 380px; }
+@media (min-width: 1100px) { .shelf { display: block; } }
+.shelf__book {
+  position: absolute; width: 170px; top: calc(var(--n) * 28px + 10px); left: calc(var(--n) * 62px);
+  transform: rotate(calc((var(--n) - 1) * 7deg));
+  transition: transform 0.5s var(--app-ease);
+  animation: app-rise 0.7s var(--app-ease) both; animation-delay: calc(var(--n) * 120ms);
+}
+.shelf:hover .shelf__book { transform: rotate(calc((var(--n) - 1) * 11deg)) translateY(-6px); }

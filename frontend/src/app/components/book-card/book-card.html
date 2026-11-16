@@ -1,0 +1,38 @@
+<article class="card rise" [style.--i]="index()">
+  <div class="card__cover">
+    <app-book-cover [book]="book()" />
+    <div class="card__actions">
+      <button type="button" class="card__ask" (click)="askAbout()" [attr.aria-label]="'Ask the assistant about ' + book().title">
+        <i class="pi pi-sparkles" aria-hidden="true"></i> Ask AI
+      </button>
+    </div>
+  </div>
+
+  <div class="card__body">
+    <h3 class="card__title">
+      <a class="card__link" [routerLink]="['/books', book().id]">{{ book().title }}</a>
+    </h3>
+    <p class="card__author">{{ book().author }}</p>
+
+    <div class="card__meta">
+      @if (book().genre) {
+        <span class="chip chip--static"><span class="dot" [style.background]="dot()" aria-hidden="true"></span>{{ book().genre }}</span>
+      }
+    </div>
+
+    <div class="card__foot">
+      @if (rating() > 0) {
+        <span class="rating tnum" [attr.aria-label]="'Rated ' + rating() + ' out of 5'">
+          <i class="pi pi-star-fill" aria-hidden="true"></i>{{ rating() }}
+        </span>
+      } @else {
+        <span class="muted small nowrap">Unrated</span>
+      }
+      @if (book().isAvailable) {
+        <span class="badge badge--ok"><i class="pi pi-check-circle" aria-hidden="true"></i>Available</span>
+      } @else {
+        <span class="badge badge--busy"><i class="pi pi-clock" aria-hidden="true"></i>Borrowed</span>
+      }
+    </div>
+  </div>
+</article>

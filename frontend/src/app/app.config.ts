@@ -4,9 +4,10 @@ import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
 
 import { providePrimeNG } from 'primeng/config';
-import Aura from '@primeuix/themes/aura';
+import { AppPreset } from '../theme/app-preset';
 import { provideHttpClient, withInterceptors, withXhr } from '@angular/common/http';
 import { ConfirmationService, MessageService } from 'primeng/api';
+import { environment } from '../environments/environment';
 import { authInterceptor } from './interceptors/auth-interceptor';
 
 export const appConfig: ApplicationConfig = {
@@ -15,8 +16,9 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideHttpClient(withXhr(), withInterceptors([authInterceptor])),
     providePrimeNG({
+      license: environment.primeuiLicense || undefined,
       theme: {
-        preset: Aura,
+        preset: AppPreset,
         options: {
           darkModeSelector: '.my-app-dark'
         }

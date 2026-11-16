@@ -1,0 +1,54 @@
+:host { display: block; container-type: inline-size; }
+
+.cover {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 6px 10px 10px 6px;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 11% 10% 9% 16%;
+  isolation: isolate;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.12) inset, 0 10px 24px -10px rgb(0 0 0 / 0.55);
+
+  /* spine */
+  &::before {
+    content: '';
+    position: absolute; inset: 0 auto 0 0; width: 7%;
+    background: linear-gradient(90deg, rgb(0 0 0 / 0.3), rgb(255 255 255 / 0.1) 55%, transparent);
+    z-index: -1;
+  }
+  /* pattern */
+  &::after {
+    content: '';
+    position: absolute; inset: 0; z-index: -1; opacity: 0.5;
+  }
+  &[data-pattern='0']::after { background: radial-gradient(circle at 85% 12%, rgb(255 255 255 / 0.22) 0 22%, transparent 23%); }
+  &[data-pattern='1']::after { background: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.09) 0 2px, transparent 2px 14px); }
+  &[data-pattern='2']::after { background: radial-gradient(circle at 20% 90%, rgb(255 255 255 / 0.2) 0 30%, transparent 31%), radial-gradient(circle at 90% 10%, rgb(0 0 0 / 0.25) 0 18%, transparent 19%); }
+  &[data-pattern='3']::after { background: linear-gradient(160deg, transparent 55%, rgb(255 255 255 / 0.14) 55% 56%, transparent 56%), linear-gradient(160deg, transparent 66%, rgb(255 255 255 / 0.1) 66% 67%, transparent 67%); }
+}
+
+.cover__genre {
+  font: 600 clamp(8px, 5.4cqw, 11px)/1.2 var(--p-app-font-sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.cover__title {
+  font: 600 clamp(12px, 9cqw, 22px)/1.1 var(--p-app-font-display);
+  letter-spacing: -0.01em;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+  text-wrap: balance;
+}
+.cover__mono {
+  font: 700 clamp(22px, 26cqw, 64px)/0.9 var(--p-app-font-display);
+  opacity: 0.2;
+  align-self: flex-end;
+  letter-spacing: -0.04em;
+}
+
+img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1; }

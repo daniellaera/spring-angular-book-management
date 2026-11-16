@@ -1,0 +1,74 @@
+:host { display: block; height: 100%; }
+
+.card {
+  position: relative;
+  display: flex; flex-direction: column; gap: 0.9rem;
+  height: 100%;
+  padding: 0.85rem 0.85rem 1rem;
+  background: var(--p-app-card);
+  border: 1px solid var(--p-app-border);
+  border-radius: var(--p-app-radius-lg);
+  box-shadow: var(--p-app-shadow-sm);
+  animation-delay: calc(var(--i, 0) * 28ms);
+  transition: transform 0.25s var(--app-ease), box-shadow 0.25s var(--app-ease), border-color 0.2s;
+
+  &:hover, &:focus-within {
+    transform: translateY(-4px);
+    box-shadow: var(--p-app-shadow-lg);
+    border-color: var(--p-app-border-strong);
+  }
+  &:active { transform: translateY(-1px) scale(0.995); }
+}
+
+.card__cover { position: relative; padding: 0.4rem 0.9rem 0; }
+
+/* Quick actions: revealed on hover / keyboard focus; always visible where hover does not exist (touch) */
+.card__actions {
+  position: absolute; inset: auto 1.3rem 0.7rem 1.3rem;
+  display: flex; justify-content: center;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity 0.2s, transform 0.25s var(--app-ease);
+  z-index: 2;
+}
+.card:hover .card__actions, .card:focus-within .card__actions { opacity: 1; transform: none; }
+@media (hover: none) { .card__actions { opacity: 1; transform: none; } }
+
+.card__ask {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.4rem 0.8rem; min-height: 36px;
+  border-radius: 999px; border: 1px solid var(--p-app-border-strong);
+  background: var(--p-app-glass); color: var(--p-app-text);
+  backdrop-filter: blur(10px);
+  font: 600 0.8rem/1 var(--p-app-font-sans);
+  cursor: pointer;
+  transition: background-color 0.15s, transform 0.15s var(--app-ease);
+  i { color: var(--p-app-ai); }
+  &:hover { background: var(--p-app-elevated); }
+  &:active { transform: scale(0.95); }
+}
+
+.card__body { display: flex; flex-direction: column; gap: 0.35rem; flex: 1; padding-inline: 0.25rem; }
+
+.card__title {
+  font-size: 1.12rem; line-height: 1.2; letter-spacing: -0.01em;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+/* stretched link: the whole card is the click target, the Ask button sits above it */
+.card__link {
+  color: var(--p-app-text); text-decoration: none;
+  &::after { content: ''; position: absolute; inset: 0; z-index: 1; border-radius: var(--p-app-radius-lg); }
+  &:focus-visible { outline: none; }
+  &:focus-visible::after { outline: 2px solid var(--p-app-focus); outline-offset: 2px; }
+}
+.card__author { color: var(--p-app-muted); font-size: 0.9rem; }
+
+.card__meta { margin-top: 0.2rem; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.chip--static { cursor: default; min-height: 26px; padding: 0.12rem 0.6rem; font-size: 0.75rem; &:hover { background: transparent; } &:active { transform: none; } }
+
+.card__foot {
+  margin-top: auto; padding-top: 0.6rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+}
+.rating { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; font-size: 0.9rem; i { color: var(--p-primary-color); font-size: 0.8rem; } }
+.small { font-size: 0.8rem; }
+.nowrap { white-space: nowrap; }

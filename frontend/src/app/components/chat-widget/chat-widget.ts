@@ -1,76 +1,92 @@
-import { Component, ViewChild, ElementRef, signal, computed, ChangeDetectionStrategy } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { ButtonModule } from 'primeng/button';
-import { BadgeModule } from 'primeng/badge';
-import { TooltipModule } from 'primeng/tooltip';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { ChatAiService } from '../../services/chat-ai.service';
 import { AuthService } from '../../services/auth.service';
+import { ChatUiService } from '../../services/chat-ui.service';
 import { ChatMessage } from '../../models/chat-message.model';
-import { InputText } from 'primeng/inputtext';
 
 @Component({
   selector: 'app-chat-widget',
-  standalone: true,
-  imports: [CommonModule, FormsModule, ButtonModule, BadgeModule, TooltipModule, InputText],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink],
   templateUrl: './chat-widget.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './chat-widget.scss'
 })
 export class ChatWidget {
-  @ViewChild('messagesContainer') messagesContainer!: ElementRef;
+  private chatAiService = inject(ChatAiService);
+  private authService = inject(AuthService);
+  private chat = inject(ChatUiService);
 
-  isOpen = signal(false);
-  isLoading = signal(false);
-  userMessage = '';
-  messages = signal<ChatMessage[]>([]);
+  private messagesContainer = viewChild<ElementRef<HTMLElement>>('messagesContainer');
+  private inputEl = viewChild<ElementRef<HTMLInputElement>>('chatInput');
 
-  isLoggedIn = computed(() => this.authService.isLoggedIn());
-  userName = computed(() => this.authService.getFullName());
+  protected isOpen = this.chat.isOpen;
+  protected isLoading = signal(false);
+  protected userMessage = signal('');
+  protected messages = signal<ChatMessage[]>([]);
 
-  constructor(
-    private chatAiService: ChatAiService,
-    private authService: AuthService
-  ) {}
+  protected isLoggedIn = computed(() => this.authService.isLoggedIn());
+  protected userName = computed(() => this.authService.getFullName());
 
-  toggleChat(): void {
-    this.isOpen.update(v => !v);
+  protected readonly suggestions = [
+    'What can I borrow right now?',
+    'Which books are by Robert C. Martin?',
+    'Recommend something about AI'
+  ];
 
-    if (this.isOpen() && this.messages().length === 0 && this.isLoggedIn()) {
-      this.messages.set([{
-        role: 'assistant',
-        content: `Hi ${this.userName()}! 👋 I'm your library assistant. Ask me anything about our book collection!`,
-        timestamp: new Date()
-      }]);
-    }
+  constructor() {
+    // greeting + focus whenever the panel opens
+    effect(() => {
+      if (!this.isOpen()) return;
+      untracked(() => {
+        if (this.messages().length === 0 && this.isLoggedIn()) {
+          this.messages.set([{
+            role: 'assistant',
+            content: `Hi ${this.userName()}! I'm your library assistant. Ask me anything about the collection.`,
+            timestamp: new Date()
+          }]);
+        }
+        setTimeout(() => { this.inputEl()?.nativeElement.focus(); this.scrollToBottom(); }, 80);
+      });
+    });
 
-    if (this.isOpen()) {
-      setTimeout(() => this.scrollToBottom(), 100);
-    }
+    // a page asked the assistant something (e.g. "Ask AI" on a book card)
+    effect(() => {
+      const question = this.chat.pendingQuestion();
+      if (!question) return;
+      untracked(() => {
+        this.chat.pendingQuestion.set(null);
+        if (this.isLoggedIn()) this.send(question);
+      });
+    });
   }
 
-  sendMessage(): void {
-    const question = this.userMessage.trim();
+  protected toggleChat(): void {
+    this.chat.toggle();
+  }
+
+  protected close(): void {
+    this.chat.close();
+  }
+
+  protected onInput(event: Event): void {
+    this.userMessage.set((event.target as HTMLInputElement).value);
+  }
+
+  protected sendMessage(): void {
+    this.send(this.userMessage());
+  }
+
+  protected send(text: string): void {
+    const question = text.trim();
     if (!question || this.isLoading()) return;
 
-    // add user message
-    this.messages.update(msgs => [...msgs, {
-      role: 'user' as const,
-      content: question,
-      timestamp: new Date()
-    }]);
-
-    this.userMessage = '';
+    this.messages.update(msgs => [...msgs, { role: 'user' as const, content: question, timestamp: new Date() }]);
+    this.userMessage.set('');
     this.isLoading.set(true);
 
-    // Add empty assistant message for streaming
-    const assistantMessage: ChatMessage = {
-      role: 'assistant',
-      content: '',
-      timestamp: new Date(),
-      isStreaming: true
-    };
-
+    // Empty assistant message that fills up while streaming
+    const assistantMessage: ChatMessage = { role: 'assistant', content: '', timestamp: new Date(), isStreaming: true };
     this.messages.update(msgs => [...msgs, assistantMessage]);
     this.scrollToBottom();
 
@@ -99,27 +115,27 @@ export class ChatWidget {
     });
   }
 
-  onKeyDown(event: KeyboardEvent): void {
+  protected onKeyDown(event: KeyboardEvent): void {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       this.sendMessage();
     }
   }
 
-  clearChat(): void {
-    this.messages.set([{
-      role: 'assistant',
-      content: `Chat cleared! How can I help you?`,
-      timestamp: new Date()
-    }]);
+  protected onPanelKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      this.close();
+    }
+  }
+
+  protected clearChat(): void {
+    this.messages.set([{ role: 'assistant', content: 'Chat cleared! How can I help you?', timestamp: new Date() }]);
   }
 
   private scrollToBottom(): void {
     setTimeout(() => {
-      if (this.messagesContainer) {
-        const el = this.messagesContainer.nativeElement;
-        el.scrollTop = el.scrollHeight;
-      }
+      const el = this.messagesContainer()?.nativeElement;
+      if (el) el.scrollTop = el.scrollHeight;
     }, 50);
   }
 }

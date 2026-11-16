@@ -1,90 +1,67 @@
-<!-- Floating chat bubble -->
-<div class="chat-widget">
+<div class="chat">
 
-  <!-- Toggle button -->
-  <button
-    class="chat-toggle"
-    (click)="toggleChat()"
-    pTooltip="Library Assistant"
-    tooltipPosition="left">
-    @if (isOpen()) {
-      <i class="pi pi-times"></i>
-    } @else {
-      <i class="pi pi-sparkles"></i>
-    }
-  </button>
-
-  <!-- Chat panel -->
   @if (isOpen()) {
-    <div class="chat-panel">
+    <section class="panel chat__panel" id="chat-panel" role="dialog" aria-label="Library assistant" (keydown)="onPanelKeydown($event)">
 
-      <!-- Header -->
-      <div class="chat-header">
-        <div class="chat-header-info">
-          <i class="pi pi-bolt"></i>
-          <span>Library Assistant</span>
+      <div class="chat__head">
+        <span class="chat__avatar" aria-hidden="true"><i class="pi pi-sparkles"></i></span>
+        <div class="chat__heading">
+          <h2 class="chat__title">Library assistant</h2>
+          <p class="chat__sub">Answers from your catalogue</p>
         </div>
-        <button class="chat-header-btn" (click)="clearChat()" pTooltip="Clear chat">
-          <i class="pi pi-trash"></i>
-        </button>
+        <button type="button" class="icon-btn icon-btn--sm" (click)="clearChat()" aria-label="Clear the conversation"><i class="pi pi-trash" aria-hidden="true"></i></button>
+        <button type="button" class="icon-btn icon-btn--sm" (click)="close()" aria-label="Close the assistant"><i class="pi pi-times" aria-hidden="true"></i></button>
       </div>
 
       @if (isLoggedIn()) {
-        <!-- Messages -->
-        <div class="chat-messages" #messagesContainer>
-          @for (msg of messages(); track msg.timestamp) {
-            <div class="chat-msg" [class.user]="msg.role === 'user'" [class.assistant]="msg.role === 'assistant'">
+        <div class="chat__messages" #messagesContainer role="log" aria-live="polite" aria-label="Conversation">
+          @for (msg of messages(); track $index) {
+            <div class="msg" [class.msg--user]="msg.role === 'user'">
               @if (msg.role === 'assistant') {
-                <div class="msg-avatar">
-                  <i class="pi pi-bolt"></i>
-                </div>
+                <span class="msg__avatar" aria-hidden="true"><i class="pi pi-sparkles"></i></span>
               }
-              <div class="msg-bubble">
-                <span>{{ msg.content }}</span>
-                @if (msg.isStreaming) {
-                  <span class="streaming-cursor">▊</span>
+              <div class="msg__bubble">
+                <span class="sr-only">{{ msg.role === 'user' ? 'You:' : 'Assistant:' }}</span>
+                @if (msg.content) { <span class="msg__text">{{ msg.content }}</span> }
+                @if (msg.isStreaming && !msg.content) {
+                  <span class="typing" aria-label="The assistant is typing"><span></span><span></span><span></span></span>
+                } @else if (msg.isStreaming) {
+                  <span class="cursor" aria-hidden="true"></span>
                 }
               </div>
             </div>
           }
 
-          @if (isLoading() && messages().length > 0 && !messages()[messages().length - 1].isStreaming) {
-            <div class="chat-msg assistant">
-              <div class="msg-avatar">
-                <i class="pi pi-bolt"></i>
-              </div>
-              <div class="msg-bubble typing">
-                <span class="dot"></span>
-                <span class="dot"></span>
-                <span class="dot"></span>
-              </div>
+          @if (messages().length <= 1) {
+            <div class="suggestions" role="group" aria-label="Suggested questions">
+              @for (s of suggestions; track s) {
+                <button type="button" class="chip" (click)="send(s)" [disabled]="isLoading()">{{ s }}</button>
+              }
             </div>
           }
         </div>
 
-        <!-- Input -->
-        <div class="chat-input">
-          <input
-            type="text"
-            [(ngModel)]="userMessage"
-            (keydown)="onKeyDown($event)"
-            placeholder="Ask about our books..."
-            [disabled]="isLoading()"
-            pInputText />
-          <button
-            class="send-btn"
-            (click)="sendMessage()"
-            [disabled]="isLoading() || !userMessage.trim()">
-            <i class="pi pi-send"></i>
+        <form class="chat__input" (submit)="$event.preventDefault(); sendMessage()">
+          <label for="chat-input" class="sr-only">Your question</label>
+          <input #chatInput id="chat-input" type="text" autocomplete="off"
+                 [value]="userMessage()" (input)="onInput($event)" (keydown)="onKeyDown($event)"
+                 placeholder="Ask about the books…" [disabled]="isLoading()" />
+          <button type="submit" class="send" [disabled]="isLoading() || !userMessage().trim()" aria-label="Send">
+            <i class="pi pi-arrow-up" aria-hidden="true"></i>
           </button>
-        </div>
+        </form>
       } @else {
-        <!-- Not logged in -->
-        <div class="chat-login-prompt">
-          <i class="pi pi-lock"></i>
-          <p>Please log in to use the library assistant.</p>
+        <div class="chat__login">
+          <i class="pi pi-lock" aria-hidden="true"></i>
+          <p>Sign in to talk to the library assistant.</p>
+          <a routerLink="/login" class="cta" (click)="close()">Sign in</a>
         </div>
       }
-    </div>
+    </section>
   }
+
+  <button type="button" class="fab" (click)="toggleChat()" [attr.aria-expanded]="isOpen()" aria-controls="chat-panel"
+          [attr.aria-label]="isOpen() ? 'Close the library assistant' : 'Open the library assistant'">
+    <i class="pi" [class.pi-sparkles]="!isOpen()" [class.pi-times]="isOpen()" aria-hidden="true"></i>
+  </button>
 </div>

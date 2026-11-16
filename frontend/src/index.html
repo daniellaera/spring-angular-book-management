@@ -5,7 +5,15 @@
   <title>Book Management</title>
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A personal book library with an AI assistant: browse, borrow, rate and ask in plain language.">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <!-- Apply the saved theme before first paint (dark-first); keep in sync with ThemeService -->
+  <script>
+    try { if (localStorage.getItem('theme') !== 'light') document.documentElement.classList.add('my-app-dark'); }
+    catch (e) { document.documentElement.classList.add('my-app-dark'); }
+  </script>
 </head>
 <body>
   <app-root></app-root>
