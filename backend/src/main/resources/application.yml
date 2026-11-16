@@ -60,6 +60,14 @@ quartz:
 app:
   version: @project.version@
   build-time: @maven.build.timestamp@
+  indexing:
+    # Qdrant indexing, replaces the n8n nightly "book-index" workflow (see docs/AI.md)
+    scheduled:
+      enabled: ${APP_INDEXING_SCHEDULED_ENABLED:true}   # nightly full (incremental) reindex
+      cron: ${APP_INDEXING_SCHEDULED_CRON:0 0 0 * * *}  # Spring 6-field cron: sec min hour day month weekday
+      zone: ${APP_INDEXING_SCHEDULED_ZONE:}             # e.g. Europe/Zurich; empty = JVM default time zone
+    on-change:
+      enabled: ${APP_INDEXING_ON_CHANGE_ENABLED:true}   # index/remove the single book right after create/delete
 
 qdrant:
   url: ${QDRANT_URL}

@@ -41,3 +41,10 @@ ai:
 
 ollama:
   api-url: http://localhost:11434
+
+app:
+  indexing:
+    scheduled:
+      enabled: false   # no nightly run / Ollama calls in the Spring context tests
+    on-change:
+      enabled: false
