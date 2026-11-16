@@ -26,7 +26,7 @@ spring:
         version: 1.0.0
         type: SYNC
         protocol: STATELESS            # streamable HTTP without sessions: read-only tools need none
-        instructions: Read-only catalogue of a private book library: search, details, counts, by author, by genre.
+        instructions: "Read-only catalogue of a private book library: search, details, counts, by author, by genre."
         streamable-http:
           mcp-endpoint: /mcp
         request-timeout: 20s
