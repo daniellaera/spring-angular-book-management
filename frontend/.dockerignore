@@ -1,1 +1,35 @@
+# Build context for the frontend image (see Dockerfile). `npm ci` installs dependencies inside the image,
+# so nothing local that is generated, huge or sensitive should be sent to the daemon.
+
+# Dependencies and build output (rebuilt in the image; a local node_modules would also overwrite the
+# `npm ci` one at `COPY . .`)
+node_modules
+dist
+.angular
+out-tsc
+coverage
+.nyc_output
+tmp
+
+# VCS and editor state
+.git
+.gitignore
+.idea
+.vscode
+.DS_Store
+*.log
+
+# Local env files and secrets: never part of an image
+.env
+.env.*
+*.env
+*.pem
+*.key
+
+# Generated PrimeUI licence file (the image regenerates it from the BuildKit secret)
 src/environments/primeui-license.generated.ts
+
+# Not needed to build
+Dockerfile
+.dockerignore
+README.md
