@@ -23,6 +23,8 @@ spring:
             redirect-uri: http://localhost:4200/login/oauth2/code/github
   docker:
     compose:
+      # Spring Boot only looks for compose.yaml / docker-compose.yml by default; this file has a custom name.
+      # Path is relative to the working directory, i.e. backend/ when started with ./mvnw spring-boot:run there.
       file: docker-compose.db.yml
   ai:
     anthropic:
