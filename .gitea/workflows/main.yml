@@ -208,7 +208,10 @@ jobs:
           DOCKER_BUILDKIT: "1"
         run: |
           # Licence key passed as a BuildKit secret (not a build-arg): not stored in the image history.
+          # --pull: always check for the current node:24-slim. A stale copy cached on the runner could be older
+          # than the Node 24.15 that Angular CLI 22 needs, and `docker build` reuses a local base image otherwise.
           docker build \
+            --pull \
             --platform linux/amd64 \
             --secret id=primeui_license,env=PRIMEUI_LICENSE \
             -t ${REGISTRY}/book-frontend:latest \
