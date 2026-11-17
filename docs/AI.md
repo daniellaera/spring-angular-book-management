@@ -56,7 +56,7 @@ openssl rand -hex 32          # generate the token; put it in Infisical (project
 
 ### Connect Claude Code
 ```
-claude mcp add --transport http book-library https://bookmanagement.daniellaera.com/mcp \
+claude mcp add --transport http book-library https://<your-domain>/mcp \
   --header "Authorization: Bearer $MCP_API_TOKEN"
 ```
 Then `/mcp` in Claude Code lists `book-library` with its six tools; ask e.g. "how many books are available?".
@@ -69,7 +69,7 @@ Custom connectors in Desktop use OAuth, so use the `mcp-remote` bridge in `claud
   "mcpServers": {
     "book-library": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "https://bookmanagement.daniellaera.com/mcp", "--header", "Authorization:${AUTH_HEADER}"],
+      "args": ["-y", "mcp-remote", "https://<your-domain>/mcp", "--header", "Authorization:${AUTH_HEADER}"],
       "env": { "AUTH_HEADER": "Bearer <MCP_API_TOKEN>" }
     }
   }
@@ -78,8 +78,8 @@ Custom connectors in Desktop use OAuth, so use the `mcp-remote` bridge in `claud
 
 ### Quick manual check
 ```
-curl -s -o /dev/null -w '%{http_code}\n' -X POST https://bookmanagement.daniellaera.com/mcp            # 401
-curl -s -X POST https://bookmanagement.daniellaera.com/mcp -H "Authorization: Bearer $MCP_API_TOKEN" \
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<your-domain>/mcp            # 401
+curl -s -X POST https://<your-domain>/mcp -H "Authorization: Bearer $MCP_API_TOKEN" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
@@ -102,7 +102,7 @@ curl -s -X POST https://bookmanagement.daniellaera.com/mcp -H "Authorization: Be
 
 ## Indexing: how Qdrant stays in sync
 Three triggers, one code path (`BookVectorIndexService`; point id = book id, writes are upserts, so repeating any of them never duplicates):
-- **scheduled**: `ScheduledBookIndexer`, nightly (replaces the n8n "book-index" workflow). Incremental full run: only new/changed books
+- **scheduled**: `ScheduledBookIndexer`, nightly. Incremental full run: only new/changed books
   (SHA-256 `contentHash`) are re-embedded, points of deleted books are removed.
 - **event**: `BookService` publishes `BookChangedEvent` on create/delete; `BookIndexEventListener` (`@TransactionalEventListener(AFTER_COMMIT)`
   + `@Async` on the single-thread `bookIndexingExecutor`) upserts or deletes just that book. It never slows or fails the HTTP request: errors are one WARN line,
@@ -135,7 +135,7 @@ flowchart TB
     U --> Q[("Qdrant")]
 ```
 
-*Indexing flow: three triggers share one service; the n8n workflow it replaces is removed. Full runs are guarded and hash-skipped, single-book runs upsert by book id, so repeats never duplicate.*
+*Indexing flow: three triggers share one service. Full runs are guarded and hash-skipped, single-book runs upsert by book id, so repeats never duplicate.*
 
 ```mermaid
 sequenceDiagram
@@ -178,8 +178,6 @@ indexing done trigger=event books=1 durationMs=210 bookId=33
 indexing skipped trigger=manual reason=already-running
 indexing failed trigger=event bookId=33 type=CREATED error=... (nightly run will catch up)
 ```
-**The n8n "book-index" workflow is obsolete.** Run both in parallel for a few days (safe: idempotent), then disable the n8n
-workflow after one successful `indexing done trigger=scheduled` line in prod.
 
 ## Cost notes
 - Each uncached question costs one model call plus one more per tool round trip (at most 3). Tool results are short rows, so a typical

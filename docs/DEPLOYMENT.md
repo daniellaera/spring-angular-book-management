@@ -1,31 +1,31 @@
 # book-management: deployment
 
-Status of the migration from VM `app-book-dev` (+ separate DB host `book-management-db-dev.home`) to LXC CT 110 `book-management`
-(192.168.1.110, Debian 13, unprivileged, nesting, 2 vCPU / 4 GB / 20 GB on `big-data-pve`, pool `book-pool`, onboot) with Postgres in Docker.
+Status of the migration from VM `<old-vm>` (+ separate DB host `<old-db-host>`) to LXC CT 110 `book-management`
+(<app-host>, Debian 13, unprivileged, nesting, 2 vCPU / 4 GB / 20 GB on `<pve-node>`, pool `book-pool`, onboot) with Postgres in Docker.
 
 ## Status / blockers
 | Step | State |
 |------|-------|
 | 0-1 Audit, land AI hardening | Done. 75 tests green (run in `maven:3.9.9-temurin-21` with the Docker socket; local JDK 25 breaks Lombok). |
 | 2 Secrets | **Done**: 11 secrets in Infisical (project `book-management`, env `prod`), runtime identity `book-runtime` (Viewer). `DATABASE_URL` and `QDRANT_URL` are NOT in Infisical: fixed in `compose.prod.yml` (internal service names). The tmpfs staging files were shredded. |
-| 3 LXC | **Done**: CT 110 (192.168.1.110, Debian 13, unprivileged, nesting, 2 vCPU/4 GB/20 GB, onboot). |
-| 4 Pipeline | **Done and exercised** (Gitea Actions, main -> test -> build -> push to the Gitea registry -> deploy to CT 110 with `redeploy.sh <sha>`). Gitea repo secrets: `VM_HOST`=192.168.1.110, `VM_USER`=root, `VM_SSH_PORT`=22, `SSH_PRIVATE_KEY` (dedicated deploy key, authorised on CT 110), `REGISTRY_PUSH_USER` + `REGISTRY_PUSH_TOKEN` (package read+write). Pull side: `GITEA_REGISTRY_USER` / `GITEA_REGISTRY_TOKEN` (read:package) in Infisical. Registry `192.168.1.103:3000` is declared insecure on CT 110 and runner VM 200. |
+| 3 LXC | **Done**: CT 110 (<app-host>, Debian 13, unprivileged, nesting, 2 vCPU/4 GB/20 GB, onboot). |
+| 4 Pipeline | **Done and exercised** (Gitea Actions, main -> test -> build -> push to the Gitea registry -> deploy to CT 110 with `redeploy.sh <sha>`). Gitea repo secrets: `VM_HOST`=<app-host>, `VM_USER`=root, `VM_SSH_PORT`=22, `SSH_PRIVATE_KEY` (dedicated deploy key, authorised on CT 110), `REGISTRY_PUSH_USER` + `REGISTRY_PUSH_TOKEN` (package read+write). Pull side: `GITEA_REGISTRY_USER` / `GITEA_REGISTRY_TOKEN` (read:package) in Infisical. Registry `<registry-host>` is declared insecure on CT 110 and runner VM 200. |
 | 5 Data + parallel run | Done, green. |
-| 6 Cutover | Final stop/dump/restore/count-compare done, stack live on `192.168.1.110:8081` with Infisical-injected secrets. NPM upstream switch is a manual step. The old backend container is STOPPED on `app-book-dev` (`docker start book-backend` = rollback). |
+| 6 Cutover | Final stop/dump/restore/count-compare done, stack live on `<app-host>:8081` with Infisical-injected secrets. NPM upstream switch is a manual step. The old backend container is STOPPED on `<old-vm>` (`docker start book-backend` = rollback). |
 
-Rollback after the NPM switch: point NPM back to the old VM and `ssh app-book-dev docker start book-backend`. Note data written
+Rollback after the NPM switch: point NPM back to the old VM and `ssh <old-vm> docker start book-backend`. Note data written
 on the new stack after cutover is not copied back.
 
 ## Reference pattern (what I could audit)
 - **esign-workflow-api (CT 109)**: unprivileged Debian LXC, nesting=1, Docker CE + compose plugin, repo cloned in `/opt/<app>`,
   non-committed `deploy/*.env` (mode 600), `deploy/redeploy.sh` = fetch, reset to origin/main, `docker compose up --build --wait`.
-  Only one port published; NPM (CT 150, 192.168.1.50) terminates TLS and proxies to `<LXC-IP>:<port>`; `onboot=1`.
+  Only one port published; NPM (CT 150, <proxy-host>) terminates TLS and proxies to `<LXC-IP>:<port>`; `onboot=1`.
   No automatic rollback.
 - **dealje (production, Hostinger/Infomaniak)**: `docker-compose.prod.yml` with capped json-file logs, pinned image digests,
   memory limits, DB bound to 127.0.0.1, `deploy/backup` (systemd timers + restore test), `deploy/db/rotate-password.sh`.
   Secrets come from a non-committed `.env.prod`. **No Infisical usage found in any local repo**, so the Infisical wiring here is new
   (Universal Auth machine identity, read-only), not copied.
-- **Deviations from the brief, on purpose**: images live in the Gitea container registry (`192.168.1.103:3000/daniellaera`). The existing Gitea secret
+- **Deviations from the brief, on purpose**: images live in the Gitea container registry (`<registry-host>/<owner>`). The existing Gitea secret
   names (`VM_HOST`, `VM_USER`, `VM_SSH_PORT`, `SSH_PRIVATE_KEY`) are reused so cutover only means changing their values.
 
 ## Estimate
@@ -37,19 +37,19 @@ on the new stack after cutover is not copied back.
 
 ## Architecture
 ```
-Internet -> router -> NPM (CT 150, 192.168.1.50) -> http://<LXC>:8081
+Internet -> router -> NPM (CT 150, <proxy-host>) -> http://<LXC>:8081
 LXC book-management (Docker): book-frontend (nginx, :8081) -> book-backend (:8080) -> db (postgres) , qdrant
-                                                              \-> Ollama 192.168.1.148:11434 (external), Anthropic API
+                                                              \-> Ollama <ollama-host>:11434 (external), Anthropic API
 CI (Gitea Actions, runner VM 200): test -> build images -> push to Gitea registry -> scp compose+redeploy.sh -> ssh redeploy.sh <sha>
 ```
 
 ## Container registry (Gitea)
-- Images: `192.168.1.103:3000/daniellaera/book-backend` and `.../book-frontend`, tagged `<git sha>` and `latest` (`REGISTRY` in the workflow, compose and redeploy.sh).
+- Images: `<registry-host>/<owner>/book-backend` and `.../book-frontend`, tagged `<git sha>` and `latest` (`REGISTRY` in the workflow, compose and redeploy.sh).
 - Push (CI): Gitea repo secrets `REGISTRY_PUSH_USER` + `REGISTRY_PUSH_TOKEN` (personal access token with package read+write). The built-in Actions token is rejected by the registry, and Gitea does not allow secret names starting with `GITEA_`.
 - Pull (CT 110): `redeploy.sh` logs in with `GITEA_REGISTRY_USER` / `GITEA_REGISTRY_TOKEN` from Infisical and logs out on exit.
 - One-time on CT 110: `deploy/setup-registry.sh` (insecure-registries reload + re-tag existing local images).
 - The registry is plain HTTP, so Docker must list it as insecure on every host that pushes or pulls (CT 110 and the runner VM 200):
-  `/etc/docker/daemon.json` -> `{"insecure-registries": ["192.168.1.103:3000"]}` (CT 110: `systemctl reload docker`).
+  `/etc/docker/daemon.json` -> `{"insecure-registries": ["<registry-host>"]}` (CT 110: `systemctl reload docker`).
 - Maven: no private repository (Central only): no `distributionManagement`, no `mvn deploy` step, no `MAVEN_SETTINGS_XML` secret.
 
 ## CI Node.js requirement
@@ -73,7 +73,7 @@ PrimeNG 22 is no longer MIT: it needs a PrimeUI licence key, read at runtime via
 - **Renewal reminder:** the licence expires on **2027-11-17**. Renew it at https://primeui.dev/licenses around **2027-10-17** (one month ahead), then update the Gitea secret `PRIMEUI_LICENSE` and redeploy. After expiry the 30-day grace period runs until about 2027-12-17.
 
 ## Secrets
-Source of truth: Infisical (192.168.1.163), project `book-management`, env `prod`.
+Source of truth: Infisical (<secrets-host>), project `book-management`, env `prod`.
 | Secret | Origin |
 |--------|--------|
 | `DATABASE_USERNAME`, `GITHUB_CLIENT_ID`, `GITHUB_SECRET`, `GITHUB_REDIRECT_URI`, `FRONTEND_URL`, `OLLAMA_URL`, `ANTHROPIC_API_KEY` | migrate once from old `backend.env`, piped, never displayed |
@@ -96,20 +96,20 @@ Containers receive secrets as environment variables at `up` time (no `.env` on d
 ## Runbook
 - Deploy: push to `main` (CI) or manually `ssh root@<LXC> /opt/book-management/deploy/redeploy.sh <sha>`.
 - Health: `curl -fsS http://<LXC>:8081/api/v3/book`; logs: `docker compose -f /opt/book-management/deploy/compose.prod.yml logs -f book-backend`.
-- Rollback: automatic on a failed health check (previous tags in `/var/lib/book-management/*.tag`). Manual: run redeploy.sh with an older tag. Older images stay on CT 110 under the Gitea names (e.g. `192.168.1.103:3000/daniellaera/book-backend:local-features1`).
+- Rollback: automatic on a failed health check (previous tags in `/var/lib/book-management/*.tag`). Manual: run redeploy.sh with an older tag. Older images stay on CT 110 under the Gitea names (e.g. `<registry-host>/<owner>/book-backend:local-features1`).
 - MCP server: `POST /mcp` with `Authorization: Bearer <MCP_API_TOKEN>` (nginx in the frontend container proxies it to the backend). Connect Claude Code/Desktop and test: `docs/AI.md`.
-- AI eval (15 questions, prints pass/fail, tokens, latency): `deploy/ai-eval.sh https://bookmanagement.daniellaera.com [--fresh]`.
+- AI eval (17 questions, prints pass/fail, tokens, latency): `deploy/ai-eval.sh https://<your-domain> [--fresh]`.
 - After the `fix/title-search` deploy the embedded text changed (lowercased): run the Qdrant reindex once (below) so documents match the lowercased queries; see `docs/AI.md`.
-- Reindex Qdrant: automatic (nightly, plus on book create/delete, see `docs/AI.md`). Manual: `POST /api/v3/ai/books/index` with header `X-Index-Token` (value from Infisical `INDEX_API_TOKEN`). Check: `grep 'indexing done'` in the backend logs. The n8n "book-index" workflow is obsolete: disable it after one successful `trigger=scheduled` run.
+- Reindex Qdrant: automatic (nightly, plus on book create/delete, see `docs/AI.md`). Manual: `POST /api/v3/ai/books/index` with header `X-Index-Token` (value from Infisical `INDEX_API_TOKEN`). Check: `grep 'indexing done'` in the backend logs.
 
 ## Cutover procedure (used; repeat for any re-do)
-1. `ssh app-book-dev docker stop book-backend`. 2. On the LXC: `deploy/dump-old-db.sh` (needs `/dev/shm/olddb.env`, piped from the old VM backend.env),
-`deploy/migrate-data.sh /root/dumps/latest.dump`, `deploy/count-rows.sh new` must equal `/root/dumps/latest.old.counts` or abort and restart the old container.
+1. `ssh <old-vm> docker stop book-backend`. 2. On the LXC: `deploy/dump-old-db.sh` (needs `/dev/shm/olddb.env`, piped from the old VM backend.env),
+`deploy/migrate-data.sh <dump-dir>/latest.dump`, `deploy/count-rows.sh new` must equal `<dump-dir>/latest.old.counts` or abort and restart the old container.
 3. `deploy/redeploy.sh <tag>`, reindex, checks, switch NPM, watch logs 10 min.
 
 ## Check list used in the parallel run (`/root/e2e.sh` pattern)
 1. Restore: on old VM `pg_dump -Fc --no-owner`, copy to LXC, `deploy/migrate-data.sh <dump>`.
-2. Start stack, reindex, test via `curl -H 'Host: bookmanagement.daniellaera.com' http://<LXC>:8081/...` or a temporary NPM host.
+2. Start stack, reindex, test via `curl -H 'Host: <your-domain>' http://<LXC>:8081/...` or a temporary NPM host.
 3. Checks: signup/login, book CRUD, `/ask` twice (second `cached=true`, `AI usage ... cached=Y` log), anonymous `/ask/stream`, `/index` without token = 401/403, with token = 200, GitHub OAuth redirect URI.
 4. Switch the NPM upstream, repeat checks on the public URL, watch logs 10 min; on any failure switch NPM back.
 5. Keep the old VM untouched for 7 days.
