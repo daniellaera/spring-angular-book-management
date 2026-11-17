@@ -143,6 +143,20 @@ jobs:
           fi
           echo "PRIMEUI_LICENSE secret is present."
 
+      # Guard: the frontend image needs `docker build --secret ...,env=` (BuildKit). The job image ships a Docker
+      # 20.10 client (no buildx); the daemon on the runner VM decides the rest. Fail early with a clear message
+      # instead of a cryptic build error, still before any image build or deploy logic.
+      - name: Guard - Docker must support BuildKit secrets (client and daemon >= 20.10)
+        run: |
+          CLIENT="$(docker version --format '{{.Client.Version}}' 2>/dev/null || true)"
+          SERVER="$(docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
+          echo "docker client: ${CLIENT:-unknown}, daemon: ${SERVER:-unreachable}"
+          at_least_20_10() { [ -n "$1" ] && [ "$(printf '%s\n20.10\n' "$1" | sort -V | head -n1)" = "20.10" ]; }
+          if ! at_least_20_10 "$CLIENT" || ! at_least_20_10 "$SERVER"; then
+            echo "::error::Docker client (${CLIENT:-unknown}) and daemon (${SERVER:-unreachable}) must both be >= 20.10 to build the frontend image with a BuildKit secret (docker build --secret id=primeui_license,env=PRIMEUI_LICENSE). Upgrade Docker on the runner VM or fix DOCKER_HOST/socket access."
+            exit 1
+          fi
+
       # Push credentials: repo secrets REGISTRY_PUSH_USER + REGISTRY_PUSH_TOKEN (Gitea token with package write).
       # The built-in Actions token is rejected by the registry, and Gitea refuses secret names starting with GITEA_.
       - name: Log in to the Gitea container registry
