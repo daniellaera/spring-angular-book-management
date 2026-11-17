@@ -99,12 +99,28 @@ jobs:
   build-and-test-frontend:
     name: Build and Test Application (Frontend)
     runs-on: ubuntu-latest
-    container: 192.168.1.103:3000/daniellaera/ci-java21-node24:24.04-1
+    container: 192.168.1.103:3000/daniellaera/ci-java21-node24:bookworm-2
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.frontend == 'true' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # Guard: Angular CLI 22, @angular/build and jsdom 31 need Node ^24.15.0 or >=26 (engines field; 25.x is not
+      # supported). The legacy image tag 24.04-1 ships Node 24.11.1; this job uses bookworm-2 (Node 24.21.0).
+      # Fail with a clear message instead of an Angular CLI engine error.
+      - name: Guard - Node.js must be >= 24.15.0 (24.x) or >= 26
+        run: |
+          NODE_V="$(node -v)"
+          echo "node: ${NODE_V}, npm: $(npm -v)"
+          V="${NODE_V#v}"; MAJOR="${V%%.*}"
+          at_least() { [ "$(printf '%s\n%s\n' "$V" "$1" | sort -V | head -n1)" = "$1" ]; }
+          if { [ "$MAJOR" = "24" ] && at_least 24.15.0; } || [ "$MAJOR" -ge 26 ] 2>/dev/null; then
+            echo "Node ${NODE_V} satisfies the Angular 22 requirement."
+          else
+            echo "::error::Node ${NODE_V} is not supported by Angular CLI 22 (needs ^24.15.0 or >=26.0.0). Use the CI image tag bookworm-2 (Node 24.21.0), not 24.04-1 (Node 24.11.1)."
+            exit 1
+          fi
 
       - name: Install dependencies
         working-directory: ./frontend
@@ -121,7 +137,7 @@ jobs:
   dockerize-and-deploy:
     name: Build Images, Push to Gitea Registry & Deploy
     runs-on: ubuntu-latest
-    container: 192.168.1.103:3000/daniellaera/ci-java21-node24:24.04-1
+    container: 192.168.1.103:3000/daniellaera/ci-java21-node24:bookworm-2
     needs: [ detect-changes, build-and-test-backend, build-and-test-frontend ]
     # A skipped test job (nothing changed there) must not skip the image job: by default a job whose
     # `needs` include a skipped job is skipped too. always() lifts that; the result checks keep failed
