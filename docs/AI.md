@@ -114,25 +114,30 @@ Three triggers, one code path (`BookVectorIndexService`; point id = book id, wri
 ```mermaid
 flowchart TB
     subgraph Triggers
-        S["Nightly @Scheduled<br/>full reindex"]
-        E["Book created / deleted<br/>AFTER_COMMIT event"]
-        X["POST /api/v3/ai/books/index<br/>(JWT or index token)"]
+        S["Nightly @Scheduled<br/>full reindex"]:::ai
+        E["Book created / deleted<br/>AFTER_COMMIT event"]:::ai
+        X["POST /api/v3/ai/books/index<br/>JWT or index token"]:::crud
     end
-    EX["Async single-thread<br/>executor"]
+    EX["Async single-thread<br/>executor"]:::edge
     E --> EX
     subgraph SVC["BookVectorIndexService"]
-        G{"Full run<br/>already running?"}
-        H["Content-hash skip<br/>(unchanged books)"]
-        U["Upsert point<br/>id = book id"]
+        G{"Full run<br/>already running?"}:::edge
+        H["Content-hash skip<br/>unchanged books"]:::ai
+        U["Upsert point<br/>id = book id"]:::ai
     end
     S --> G
     X --> G
-    G -- "yes: skip + log" --> Z["Done"]
+    G -- "yes: skip + log" --> Z["Done"]:::edge
     G -- "no" --> H
     EX -- "indexBook(id)" --> U
     H --> U
-    U --> O["Ollama<br/>embedding"]
-    U --> Q[("Qdrant")]
+    U -- "embedding" --> O["Ollama"]:::ai
+    U -- "vectors" --> Q[("Qdrant")]:::data
+
+    classDef edge fill:#64748b22,stroke:#64748b,stroke-width:2px
+    classDef crud fill:#3b82f622,stroke:#3b82f6,stroke-width:2px
+    classDef data fill:#f59e0b22,stroke:#f59e0b,stroke-width:2px
+    classDef ai fill:#14b8a622,stroke:#14b8a6,stroke-width:2px
 ```
 
 *Indexing flow: three triggers share one service. Full runs are guarded and hash-skipped, single-book runs upsert by book id, so repeats never duplicate.*
