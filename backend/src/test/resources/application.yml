@@ -22,7 +22,7 @@ frontend:
   url: http://localhost:4200/
 
 jwt:
-  secret: 357638792F423F4428472B4B6250655368566D597133743677397A2443264629
+  secret: dGVzdC1vbmx5LWp3dC1zZWNyZXQtbm90LXVzZWQtYW55d2hlcmUtZWxzZS0wMDA
   expiration: 300000
   jwtRefreshExpirationMs: 600000
 
