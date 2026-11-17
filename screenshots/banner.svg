@@ -100,7 +100,7 @@
             <path d="M0,-14 L-12,2 L-9,12 L0,17 L9,12 L12,2 Z" fill="#dd0031" opacity="0.3"/>
             <text x="0" y="5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="16" font-weight="700" fill="#dd0031">A</text>
         </g>
-        <text x="40" y="72" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#dd0031" font-weight="600">Angular 21</text>
+        <text x="40" y="72" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#dd0031" font-weight="600">Angular 22</text>
     </g>
 
     <!-- PostgreSQL Icon -->
