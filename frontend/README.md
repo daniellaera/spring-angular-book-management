@@ -7,8 +7,10 @@ This project was generated using [Angular CLI](https://github.com/angular/angula
 To start a local development server, run:
 
 ```bash
-ng serve
+npm start
 ```
+
+Use `npm start`, `npm run build` and `npm test` rather than `ng ...` directly: the npm hooks generate the gitignored PrimeUI licence file the app imports (set `PRIMEUI_LICENSE`, see [docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md#primeui-licence-frontend-build)).
 
 Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
 

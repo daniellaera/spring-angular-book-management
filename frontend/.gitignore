@@ -42,3 +42,6 @@ __screenshots__/
 # System files
 .DS_Store
 Thumbs.db
+
+# PrimeUI licence key, generated at build time by scripts/generate-primeui-license.mjs (never commit)
+/src/environments/primeui-license.generated.ts
