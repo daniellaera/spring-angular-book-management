@@ -169,10 +169,10 @@ None of the following exists in the code yet:
 
 ## Quick start
 
-Prerequisites: Java 21, Node.js 24+, Docker with Compose, [Ollama](https://ollama.com), an Anthropic API key.
+Prerequisites: JDK 21 to 25 (the build targets Java 21; tested on 21 and 25), Node.js 24+, Docker with Compose, [Ollama](https://ollama.com), an Anthropic API key.
 
 ```bash
-# 1. PostgreSQL + Qdrant
+# 1. PostgreSQL + Qdrant (optional: the dev profile also starts it for you, see below)
 cd backend && docker compose -f docker-compose.db.yml up -d
 
 # 2. Embedding model
@@ -191,6 +191,7 @@ export GITHUB_CLIENT_SECRET=<oauth-app-client-secret>  # only for GitHub login
 cd ../frontend && npm install && npm start
 ```
 
+- The compose file is named `docker-compose.db.yml`, which Spring Boot does not detect by default. The dev template sets `spring.docker.compose.file: docker-compose.db.yml` (relative to `backend/`), so `./mvnw spring-boot:run` from `backend/` starts PostgreSQL and Qdrant itself. This only applies after you copy `application-dev.example.yml` to `application-dev.yml` (step 3); without that file you get "No Docker Compose file found".
 - Machine-specific overrides can go in `application-local.yml` (gitignored; run with `profiles=dev,local`); `.env*` files are gitignored too. No secrets are stored in the repository.
 - `npm start` and `npm test` work without a PrimeUI licence key (a banner is shown); `npm run build` needs one. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#primeui-licence-frontend-build).
 - Swagger UI (dev only): `http://localhost:8080/swagger-ui.html`. Sign in via `POST /api/v3/auth/signin`, then use **Authorize** with the returned token.
