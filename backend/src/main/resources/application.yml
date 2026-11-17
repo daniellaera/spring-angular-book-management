@@ -61,7 +61,7 @@ app:
   version: @project.version@
   build-time: @maven.build.timestamp@
   indexing:
-    # Qdrant indexing, replaces the n8n nightly "book-index" workflow (see docs/AI.md)
+    # Qdrant indexing, see docs/AI.md
     scheduled:
       enabled: ${APP_INDEXING_SCHEDULED_ENABLED:true}   # nightly full (incremental) reindex
       cron: ${APP_INDEXING_SCHEDULED_CRON:0 0 0 * * *}  # Spring 6-field cron: sec min hour day month weekday
@@ -87,7 +87,7 @@ mcp:
   rate-limit-per-minute: 60
 
 index:
-  api-token: ${INDEX_API_TOKEN:}   # X-Index-Token for the n8n nightly /index call; disabled when empty
+  api-token: ${INDEX_API_TOKEN:}   # X-Index-Token for the manual /index call; disabled when empty
 
 ollama:
   api-url: ${OLLAMA_URL}

@@ -85,9 +85,3 @@ springdoc:
     # This tells the UI exactly where to find the "openapi: 3.x.y" JSON
     config-url: /v3/api-docs/swagger-config
     url: /v3/api-docs
-
-minio:
-  url: http://localhost:9000
-  access-key: ${MINIO_ACCESS_KEY:}
-  secret-key: ${MINIO_SECRET_KEY:}
-  bucket: book-covers
