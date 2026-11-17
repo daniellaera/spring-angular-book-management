@@ -52,6 +52,14 @@ CI (Gitea Actions, runner VM 200): test -> build images -> push to Gitea registr
   `/etc/docker/daemon.json` -> `{"insecure-registries": ["192.168.1.103:3000"]}` (CT 110: `systemctl reload docker`).
 - Maven: no private repository (Central only): no `distributionManagement`, no `mvn deploy` step, no `MAVEN_SETTINGS_XML` secret.
 
+## CI Node.js requirement
+
+Angular CLI 22, `@angular/build` and jsdom 31 require Node **^24.15.0 or >=26.0.0** (their `engines` fields; 25.x is not supported). The frontend test job therefore runs on the CI image tag `ci-java21-node24:bookworm-2` (Node 24.21.0, npm 11.19, Docker CLI 29.8.2 + buildx), as does the deploy job. The legacy tag `24.04-1` is Debian with Node 24.11.1 and must not be used for these jobs (the infra-ci-images README also says not to use it). A guard step in the frontend job prints `node -v` and fails with an explicit message if Node is older than 24.15.0.
+
+- The image is defined in the `infra-ci-images` repo (Dockerfile with pinned versions and checksums). To change the Node version, bump `NODE_VERSION` + checksums there, publish a new immutable tag, then update the `container:` lines here.
+- `detect-changes` and `build-and-test-backend` still use `24.04-1` (they need neither Node nor Angular). Moving the backend job to `bookworm-2` (Maven 3.9.16) is a separate change.
+- The frontend Docker image build uses `node:24-slim` from Docker Hub and runs `docker build --pull`, so a stale cached base image cannot reintroduce an old Node.
+
 ## PrimeUI licence (frontend build)
 
 PrimeNG 22 is no longer MIT: it needs a PrimeUI licence key, read at runtime via `providePrimeNG({ license })`. Without a valid key PrimeNG shows an "Invalid PrimeUI License" banner.
