@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Replaces the n8n nightly "book-index" workflow. Calls the same service method as POST /api/v3/ai/books/index;
+ * In-app nightly scheduler for the Qdrant index. Calls the same service method as POST /api/v3/ai/books/index;
  * the in-JVM guard in {@link BookVectorIndexService} skips the run if another full run is in progress.
  * An empty zone means the JVM default time zone.
  */

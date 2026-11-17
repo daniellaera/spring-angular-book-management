@@ -18,7 +18,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 /**
- * Lets the n8n nightly job call POST /api/v3/ai/books/index with header {@code X-Index-Token}
+ * Lets automation (e.g. a cron job or CI step) call the manual trigger POST /api/v3/ai/books/index with header {@code X-Index-Token}
  * (value = env INDEX_API_TOKEN). Only authenticates that single endpoint; disabled when the token is unset.
  * Deliberately not a @Component, so it is only registered in the security chain.
  */

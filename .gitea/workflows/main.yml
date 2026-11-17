@@ -160,7 +160,7 @@ jobs:
           echo "PRIMEUI_LICENSE secret is present."
 
       # Guard: the frontend image needs `docker build --secret ...,env=` (BuildKit). The job image ships a Docker
-      # 20.10 client (no buildx); the daemon on the runner VM decides the rest. Fail early with a clear message
+      # 20.10 client (no buildx); the daemon on the CI runner decides the rest. Fail early with a clear message
       # instead of a cryptic build error, still before any image build or deploy logic.
       - name: Guard - Docker must support BuildKit secrets (client and daemon >= 20.10)
         run: |
@@ -224,7 +224,7 @@ jobs:
           docker push ${REGISTRY}/book-frontend:${{ github.sha }}
 
       # CI holds only the SSH deploy key + registry credentials. NO application secrets:
-      # the LXC pulls them from Infisical at start (see deploy/redeploy.sh, docs/DEPLOYMENT.md).
+      # the deploy host pulls them from the secret manager at start (see deploy/redeploy.sh, docs/DEPLOYMENT.md).
       - name: Copy deploy files to the book-management LXC
         uses: appleboy/scp-action@v0.1.7
         with:

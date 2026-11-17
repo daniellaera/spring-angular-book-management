@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Run on the NEW LXC. Dumps the OLD database (separate host) to /root/dumps/old-<ts>.dump and prints per-table row counts
-# to /root/dumps/old-<ts>.counts. Needs /dev/shm/olddb.env (DATABASE_URL/USERNAME/PASSWORD of the old DB, piped from the
+# Run on the NEW LXC. Dumps the OLD database (separate host) to <dump-dir>/old-<ts>.dump and prints per-table row counts
+# to <dump-dir>/old-<ts>.counts. Needs /dev/shm/olddb.env (DATABASE_URL/USERNAME/PASSWORD of the old DB, piped from the
 # old VM, tmpfs only). Nothing secret is printed.
 set -euo pipefail
 set +x

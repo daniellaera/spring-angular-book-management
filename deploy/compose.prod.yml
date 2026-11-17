@@ -71,7 +71,7 @@ services:
     depends_on:
       - book-backend
     ports:
-      - "8081:80"   # NPM (CT 150) proxies bookmanagement.daniellaera.com here
+      - "8081:80"   # the TLS reverse proxy forwards the public hostname here
     mem_limit: 128m
 
 volumes:

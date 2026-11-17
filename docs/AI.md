@@ -50,13 +50,13 @@ The anonymous stream uses the same tools; they only return public catalogue data
 
 ### Set up
 ```
-openssl rand -hex 32          # generate the token; put it in Infisical (project book-management, env prod) as MCP_API_TOKEN
+openssl rand -hex 32          # generate the token; store it in the secret manager as MCP_API_TOKEN
 ```
-`compose.prod.yml` already passes `MCP_API_TOKEN`; redeploy to pick it up (`redeploy.sh <tag>`). Rotate = change in Infisical + redeploy.
+`compose.prod.yml` already passes `MCP_API_TOKEN`; redeploy to pick it up (`redeploy.sh <tag>`). Rotate = change in the secret manager + redeploy.
 
 ### Connect Claude Code
 ```
-claude mcp add --transport http book-library https://<your-domain>/mcp \
+claude mcp add --transport http book-library https://bookmanagement.daniellaera.com/mcp \
   --header "Authorization: Bearer $MCP_API_TOKEN"
 ```
 Then `/mcp` in Claude Code lists `book-library` with its six tools; ask e.g. "how many books are available?".
@@ -69,7 +69,7 @@ Custom connectors in Desktop use OAuth, so use the `mcp-remote` bridge in `claud
   "mcpServers": {
     "book-library": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "https://<your-domain>/mcp", "--header", "Authorization:${AUTH_HEADER}"],
+      "args": ["-y", "mcp-remote", "https://bookmanagement.daniellaera.com/mcp", "--header", "Authorization:${AUTH_HEADER}"],
       "env": { "AUTH_HEADER": "Bearer <MCP_API_TOKEN>" }
     }
   }
@@ -78,8 +78,8 @@ Custom connectors in Desktop use OAuth, so use the `mcp-remote` bridge in `claud
 
 ### Quick manual check
 ```
-curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<your-domain>/mcp            # 401
-curl -s -X POST https://<your-domain>/mcp -H "Authorization: Bearer $MCP_API_TOKEN" \
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://bookmanagement.daniellaera.com/mcp            # 401
+curl -s -X POST https://bookmanagement.daniellaera.com/mcp -H "Authorization: Bearer $MCP_API_TOKEN" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```

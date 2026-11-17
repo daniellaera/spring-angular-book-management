@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time, run ON THE LXC (CT 110) as root. Prepares Docker for the Gitea container registry (plain HTTP):
+# One-time, run ON THE DEPLOY HOST as root. Prepares Docker for the Gitea container registry (plain HTTP):
 #  1. lists the registry as insecure (daemon reload, NOT a restart: running containers are untouched)
 #  2. re-tags images already present locally to the Gitea names so redeploy.sh rollback keeps working
 # Prints no secrets.
