@@ -52,6 +52,18 @@ CI (Gitea Actions, runner VM 200): test -> build images -> push to Gitea registr
   `/etc/docker/daemon.json` -> `{"insecure-registries": ["192.168.1.103:3000"]}` (CT 110: `systemctl reload docker`).
 - Maven: no private repository (Central only): no `distributionManagement`, no `mvn deploy` step, no `MAVEN_SETTINGS_XML` secret.
 
+## PrimeUI licence (frontend build)
+
+PrimeNG 22 is no longer MIT: it needs a PrimeUI licence key, read at runtime via `providePrimeNG({ license })`. Without a valid key PrimeNG shows an "Invalid PrimeUI License" banner.
+
+- **Licence:** Community (individual), valid until **2027-11-17**, renewable for free, with a 30-day grace period.
+- **Not a server secret:** the key is verified client-side (signed token), so it ends up in the shipped JS bundle. It is still kept out of git, logs and docs.
+- **How it is wired:** `frontend/scripts/generate-primeui-license.mjs` reads the `PRIMEUI_LICENSE` env var and writes `frontend/src/environments/primeui-license.generated.ts` (gitignored), imported by `app.config.ts`. It runs as the `prestart`, `prebuild`, `prewatch` and `pretest` npm hooks. `npm run build` (`--require`) **fails** if the variable is empty or missing; start/watch/test only warn and continue with an empty licence.
+- **CI:** Gitea repo secret `PRIMEUI_LICENSE` (Repo > Settings > Actions > Secrets). The `dockerize-and-deploy` job has a guard step that fails before any image build or deploy if the secret is empty. The frontend image build receives it as a BuildKit secret (`--secret id=primeui_license,env=PRIMEUI_LICENSE`), not a build-arg or ENV, so it is not in the image history. `npm run test:scripts` runs the generator tests.
+- **Local:** `export PRIMEUI_LICENSE="$(pbpaste)"` (key in the clipboard), then `npm start` / `npm run build` from `frontend/`.
+- **Local Docker build:** `PRIMEUI_LICENSE=... docker build --secret id=primeui_license,env=PRIMEUI_LICENSE frontend/` (BuildKit).
+- **Renewal reminder:** the licence expires on **2027-11-17**. Renew it at https://primeui.dev/licenses around **2027-10-17** (one month ahead), then update the Gitea secret `PRIMEUI_LICENSE` and redeploy. After expiry the 30-day grace period runs until about 2027-12-17.
+
 ## Secrets
 Source of truth: Infisical (192.168.1.163), project `book-management`, env `prod`.
 | Secret | Origin |

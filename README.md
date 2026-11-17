@@ -172,8 +172,11 @@ cd backend
 ```bash
 cd frontend
 npm install
-ng serve
+export PRIMEUI_LICENSE="$(pbpaste)"   # PrimeUI licence key, see below (optional in dev: a banner is shown without it)
+npm start
 ```
+
+PrimeNG 22 needs a PrimeUI licence key. `npm start`/`npm test` work without it (warning only); `npm run build` and the Docker build fail without it. Details, CI secret and renewal date (2027-11-17): [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#primeui-licence-frontend-build).
 
 **5. Access the application** at `http://localhost:4200`
 
@@ -382,7 +385,7 @@ services:
 On push to `main`:
 1. Detect changed files (backend/frontend)
 2. Build and test changed modules
-3. Build Docker images and push to the Gitea container registry
+3. Check the `PRIMEUI_LICENSE` secret is set (fails the deploy otherwise), build Docker images and push to the Gitea container registry
 4. SSH to server → pull images → `docker compose down && up -d`
 
 ---
