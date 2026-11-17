@@ -1,2 +1,9 @@
 .idea
 .DS_Store
+
+# Local secrets / overrides
+.env
+.env.*
+!.env.example
+application-local.yml
+application-local.properties

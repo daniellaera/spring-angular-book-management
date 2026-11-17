@@ -160,12 +160,22 @@ docker compose up -d   # PostgreSQL + Qdrant
 ollama pull nomic-embed-text
 ```
 
-**3. Start the backend:**
+**3. Configure and start the backend:**
+
+`application-dev.yml` is gitignored and holds no secrets in the repo. Copy the tracked template and provide the secrets as environment variables:
 
 ```bash
 cd backend
+cp src/main/resources/application-dev.example.yml src/main/resources/application-dev.yml
+export ANTHROPIC_API_KEY=<your-anthropic-key>
+export JWT_SECRET=<base64 string, e.g. from: openssl rand -base64 48>
+export GITHUB_CLIENT_ID=<oauth-app-client-id>         # only for GitHub login
+export GITHUB_CLIENT_SECRET=<oauth-app-client-secret>  # only for GitHub login
+export MINIO_ACCESS_KEY=<value> MINIO_SECRET_KEY=<value>  # only if you use the cover bucket
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
+
+Machine-specific overrides can go in `application-local.yml` (gitignored; run with `profiles=dev,local`). `.env*` files are gitignored too.
 
 **4. Start the frontend:**
 
