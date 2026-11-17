@@ -114,6 +114,10 @@ jobs:
         working-directory: ./frontend
         run: npm run test -- --watch=false
 
+      - name: Run build-script tests (PrimeUI licence generator)
+        working-directory: ./frontend
+        run: npm run test:scripts
+
   dockerize-and-deploy:
     name: Build Images, Push to Gitea Registry & Deploy
     runs-on: ubuntu-latest
@@ -125,6 +129,19 @@ jobs:
     if: ${{ always() && needs.detect-changes.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.build-and-test-backend.result) && contains(fromJSON('["success","skipped"]'), needs.build-and-test-frontend.result) && (needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.deploy == 'true') }}
     steps:
       - uses: actions/checkout@v4
+
+      # Guard: PrimeNG 22 needs a PrimeUI licence key at build time (docs/DEPLOYMENT.md, "PrimeUI licence").
+      # Fail here, before any image is built or any deploy/rollback logic runs, if the secret is missing or empty.
+      # The secret goes through env (never interpolated into the script) and its value is never printed.
+      - name: Guard - PRIMEUI_LICENSE secret must be set
+        env:
+          PRIMEUI_LICENSE: ${{ secrets.PRIMEUI_LICENSE }}
+        run: |
+          if [ -z "$(printf '%s' "$PRIMEUI_LICENSE" | tr -d '[:space:]')" ]; then
+            echo "::error::Gitea secret PRIMEUI_LICENSE is empty or missing. Refusing to deploy a frontend without a PrimeUI licence key. Add it in Repo > Settings > Actions > Secrets."
+            exit 1
+          fi
+          echo "PRIMEUI_LICENSE secret is present."
 
       # Push credentials: repo secrets REGISTRY_PUSH_USER + REGISTRY_PUSH_TOKEN (Gitea token with package write).
       # The built-in Actions token is rejected by the registry, and Gitea refuses secret names starting with GITEA_.
@@ -156,9 +173,14 @@ jobs:
           docker push ${REGISTRY}/book-backend:${{ github.sha }}
 
       - name: Build Frontend Image
+        env:
+          PRIMEUI_LICENSE: ${{ secrets.PRIMEUI_LICENSE }}
+          DOCKER_BUILDKIT: "1"
         run: |
+          # Licence key passed as a BuildKit secret (not a build-arg): not stored in the image history.
           docker build \
             --platform linux/amd64 \
+            --secret id=primeui_license,env=PRIMEUI_LICENSE \
             -t ${REGISTRY}/book-frontend:latest \
             -t ${REGISTRY}/book-frontend:${{ github.sha }} \
             ./frontend
