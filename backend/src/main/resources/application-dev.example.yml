@@ -1,0 +1,93 @@
+# Template for local development. All secrets come from environment variables (see README, "Quick start").
+# For machine-specific overrides create application-local.yml (gitignored) and run with profiles=dev,local.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/testdb
+    username: testuser
+    password: testpass
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID:}
+            client-secret: ${GITHUB_CLIENT_SECRET:}
+            redirect-uri: http://localhost:4200/login/oauth2/code/github
+  docker:
+    compose:
+      file: docker-compose.db.yml
+  ai:
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}
+      chat:
+        options:
+          model: ${ANTHROPIC_MODEL:claude-haiku-5-5}
+          max-tokens: 2048
+
+# prod db bookmanagementdb
+
+# 1-minute session
+# jwt:
+#   expiration: 60000
+#   jwtRefreshExpirationMs: 120000
+
+# 5-minute session
+jwt:
+  secret: ${JWT_SECRET:}
+  expiration: 300000  # 5 minutes in milliseconds
+  jwtRefreshExpirationMs: 600000  # 10 minutes for refresh token (optional, adjust as needed)
+
+# PROD
+# jwt:
+#   expiration: 86400000
+#   jwtRefreshExpirationMs: 86400000
+
+frontend:
+  url: http://localhost:4200/
+
+
+quartz:
+  scheduler:
+    # cron: "0 * * * * ?"  # Every minute
+    # cron: "0 0 0 * * ?" # Every day at midnight
+    cron: "0 */2 * * * ?"  # Every 2 minutes ✅
+
+app:
+  version: @project.version@
+  build-time: @maven.build.timestamp@
+
+qdrant:
+  url: http://localhost:6333
+  collection: books
+
+ai:
+  enabled: true
+  daily-limit: 20
+
+ollama:
+  api-url: http://localhost:11434
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    # This tells the UI exactly where to find the "openapi: 3.x.y" JSON
+    config-url: /v3/api-docs/swagger-config
+    url: /v3/api-docs
+
+minio:
+  url: http://localhost:9000
+  access-key: ${MINIO_ACCESS_KEY:}
+  secret-key: ${MINIO_SECRET_KEY:}
+  bucket: book-covers
